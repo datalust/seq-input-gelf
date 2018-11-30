@@ -15,3 +15,21 @@ version = "0.4"
 
 [dependencies.libflate]
 version = "0.1"
+
+[dependencies.humantime]
+version = "1"
+
+[dependencies.string_cache]
+version = "0.7"
+
+[dependencies.inlinable_string]
+version = "0.1"
+
+[dependencies.serde]
+version = "1"
+
+[dependencies.serde_derive]
+version = "1"
+
+[dependencies.serde_json]
+version = "1"
