@@ -1,0 +1,17 @@
+[package]
+name = "sqelf"
+version = "0.0.0"
+authors = ["Datalust"]
+edition = "2018"
+
+[dependencies.futures]
+version = "0.1"
+
+[dependencies.tokio]
+version = "0.1"
+
+[dependencies.bytes]
+version = "0.4"
+
+[dependencies.libflate]
+version = "0.1"
