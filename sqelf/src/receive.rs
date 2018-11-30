@@ -199,13 +199,13 @@ impl Read for ChunkRead {
 
 impl Compression {
     const MAGIC_GZIP: [u8; 2] = [0x1f, 0x8b];
-    const MAGIZ_ZLIB: u8 = 0x78;
+    const MAGIC_ZLIB: u8 = 0x78;
 
     fn detect(header: [u8; 2]) -> Option<Compression> {
         match header {
             Self::MAGIC_GZIP => Some(Compression::Gzip),
             header
-                if header[0] == Self::MAGIZ_ZLIB
+                if header[0] == Self::MAGIC_ZLIB
                     && ((u16::from(header[0]) << 8) + u16::from(header[1])) % 31 == 0 =>
             {
                 Some(Compression::Zlib)
