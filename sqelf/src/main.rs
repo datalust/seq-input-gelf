@@ -1,6 +1,10 @@
 #[macro_use]
 extern crate serde_derive;
 
+pub mod io;
+pub mod process;
+pub mod receive;
+
 use std::{error, net::SocketAddr};
 
 use tokio::{
@@ -8,10 +12,8 @@ use tokio::{
     prelude::*,
 };
 
+use crate::io::MemRead;
 use futures::{future::lazy, sync::mpsc};
-
-pub mod process;
-pub mod receive;
 
 #[derive(Debug, Default)]
 pub struct Config {
@@ -31,16 +33,16 @@ fn main() -> Result<(), Box<error::Error>> {
 
     let server = lazy(move || {
         // Spawn a background task to process events
-        let clef = process::Clef::new(config.process);
+        let process = process::Process::new(config.process);
         tokio::spawn(lazy(move || {
             rx.for_each(move |msg| {
-                let process = |msg: receive::Message| {
-                    clef.process(msg.into_reader()?)?;
+                let read_as_clef = |msg: receive::Message| {
+                    process.read_as_clef(msg)?;
 
                     Ok(())
                 };
 
-                process(msg).map_err(|e: receive::Error| eprintln!("{}", e))
+                read_as_clef(msg).map_err(|e: receive::Error| eprintln!("{}", e))
             })
         }));
 

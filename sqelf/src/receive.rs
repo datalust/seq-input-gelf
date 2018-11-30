@@ -11,6 +11,8 @@ use libflate::{gzip, zlib};
 
 use tokio::codec::Decoder;
 
+use crate::io::MemRead;
+
 pub type Error = Box<error::Error + Send + Sync>;
 
 #[derive(Debug)]
@@ -126,13 +128,22 @@ impl Message {
             }
         }
     }
+}
 
-    /**
-    Get a reader over the message bytes.
+impl MemRead for Message {
+    type Reader = Reader;
 
-    The bytes will be dechunked and decompressed.
-    */
-    pub fn into_reader(self) -> Result<Reader, Error> {
+    fn bytes(&self) -> Option<&[u8]> {
+        match &self.0 {
+            MessageInner::Single {
+                bytes,
+                compression: None,
+            } => Some(&*bytes),
+            _ => None,
+        }
+    }
+
+    fn into_reader(self) -> io::Result<Reader> {
         let compression = self.compression();
 
         let body = ChunkRead {
