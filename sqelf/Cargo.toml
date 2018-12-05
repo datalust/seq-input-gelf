@@ -16,6 +16,9 @@ version = "0.4"
 [dependencies.libflate]
 version = "0.1"
 
+[dependencies.byteorder]
+version = "1.0"
+
 [dependencies.humantime]
 version = "1"
 

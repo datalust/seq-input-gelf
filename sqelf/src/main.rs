@@ -12,7 +12,6 @@ use tokio::{
     prelude::*,
 };
 
-use crate::io::MemRead;
 use futures::{future::lazy, sync::mpsc};
 
 #[derive(Debug, Default)]
