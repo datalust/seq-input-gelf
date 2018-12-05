@@ -1,6 +1,6 @@
 use std::{
     cmp,
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, hash_map},
     error,
     io::{self, Read},
 };
@@ -41,17 +41,6 @@ pub struct Gelf {
     arrival: BTreeMap<u64, u64>,
 }
 
-#[derive(Debug)]
-struct Chunks {
-    expected_total: u8,
-    inner: Vec<Chunk>,
-}
-
-#[derive(Debug)]
-struct Chunk {
-    bytes: Bytes,
-}
-
 impl Gelf {
     pub fn new(config: Config) -> Self {
         Gelf {
@@ -81,10 +70,65 @@ impl Decoder for Gelf {
                 return Ok(Message::single(magic.and_then(Compression::detect), src));
             }
 
-            unimplemented!("begin chunked payload");
-        }
+            let chunk = Chunk { seq: header.seq_num, bytes: src };
 
-        Ok(Message::single(magic.and_then(Compression::detect), src))
+            match self.chunks.entry(header.id) {
+                // Begin a new message with the given chunk
+                hash_map::Entry::Vacant(entry) => {
+                    entry.insert(Chunks::new(header.seq_count, chunk));
+
+                    Ok(None)
+                },
+                // Add a chunk to an existing message
+                // If the chunk completes the message then return it
+                hash_map::Entry::Occupied(mut entry) => {
+                    let chunks = entry.get_mut();
+
+                    chunks.insert(chunk);
+                    if chunks.is_complete() {
+                        let (_, chunks) = entry.remove_entry();
+
+                        Ok(Message::chunked(chunks.inner.into_iter().map(|(_, chunk)| chunk)))
+                    } else {
+                        Ok(None)
+                    }
+                },
+            }
+        } else {
+            // Return a message containing a single chunk
+            Ok(Message::single(magic.and_then(Compression::detect), src))
+        }
+    }
+}
+
+#[derive(Debug)]
+struct Chunks {
+    expected_total: u8,
+    inner: BTreeMap<u8, Bytes>,
+}
+
+struct Chunk {
+    seq: u8,
+    bytes: Bytes,
+}
+
+impl Chunks {
+    fn new(expected_total: u8, chunk: Chunk) -> Self {
+        let mut inner = BTreeMap::new();
+        inner.insert(chunk.seq, chunk.bytes);
+
+        Chunks {
+            expected_total,
+            inner,
+        }
+    }
+
+    fn insert(&mut self, chunk: Chunk) {
+        self.inner.insert(chunk.seq, chunk.bytes);
+    }
+
+    fn is_complete(&self) -> bool {
+        self.expected_total as usize == self.inner.len()
     }
 }
 
@@ -172,6 +216,18 @@ impl Message {
         Some(Message(MessageInner::Single {
             compression,
             bytes: src,
+        }))
+    }
+
+    fn chunked(chunks: impl IntoIterator<Item = Bytes>) -> Option<Self> {
+        let chunks: Vec<_> = chunks.into_iter().collect();
+
+        if chunks.len() == 0 {
+            return None;
+        }
+
+        Some(Message(MessageInner::Chunked {
+            chunks,
         }))
     }
 
@@ -453,6 +509,33 @@ mod tests {
 
     #[test]
     fn message_multiple_chunks() {
-        unimplemented!();
+        let mut gelf = Gelf::new(Default::default());
+
+        let partial = gelf
+            .decode(&mut chunk(0, 0, 3, b"Hello"))
+            .expect("failed to decode message");
+
+        assert!(partial.is_none());
+
+        let partial = gelf
+            .decode(&mut chunk(0, 2, 3, b"!"))
+            .expect("failed to decode message");
+
+        assert!(partial.is_none());
+
+        let msg = gelf
+            .decode(&mut chunk(0, 1, 3, b" World"))
+            .expect("failed to decode message")
+            .expect("missing message value");
+
+        let expected = Message(MessageInner::Chunked {
+            chunks: vec![
+                Bytes::from(b"Hello" as &[u8]),
+                Bytes::from(b" World" as &[u8]),
+                Bytes::from(b"!" as &[u8]),
+            ],
+        });
+
+        assert_eq!(expected, msg);
     }
 }
