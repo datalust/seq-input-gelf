@@ -1,6 +1,6 @@
 use std::{
     cmp,
-    collections::{BTreeMap, HashMap, hash_map},
+    collections::{hash_map, BTreeMap, HashMap},
     error,
     io::{self, Read},
 };
@@ -42,7 +42,7 @@ pub struct Gelf {
 }
 
 impl Gelf {
-    pub fn new(config: Config) -> Self {
+    pub fn new(_: Config) -> Self {
         Gelf {
             chunks: HashMap::new(),
             arrival: BTreeMap::new(),
@@ -70,7 +70,10 @@ impl Decoder for Gelf {
                 return Ok(Message::single(magic.and_then(Compression::detect), src));
             }
 
-            let chunk = Chunk { seq: header.seq_num, bytes: src };
+            let chunk = Chunk {
+                seq: header.seq_num,
+                bytes: src,
+            };
 
             match self.chunks.entry(header.id) {
                 // Begin a new message with the given chunk
@@ -78,7 +81,7 @@ impl Decoder for Gelf {
                     entry.insert(Chunks::new(header.seq_count, chunk));
 
                     Ok(None)
-                },
+                }
                 // Add a chunk to an existing message
                 // If the chunk completes the message then return it
                 hash_map::Entry::Occupied(mut entry) => {
@@ -88,11 +91,13 @@ impl Decoder for Gelf {
                     if chunks.is_complete() {
                         let (_, chunks) = entry.remove_entry();
 
-                        Ok(Message::chunked(chunks.inner.into_iter().map(|(_, chunk)| chunk)))
+                        Ok(Message::chunked(
+                            chunks.inner.into_iter().map(|(_, chunk)| chunk),
+                        ))
                     } else {
                         Ok(None)
                     }
-                },
+                }
             }
         } else {
             // Return a message containing a single chunk
@@ -226,9 +231,7 @@ impl Message {
             return None;
         }
 
-        Some(Message(MessageInner::Chunked {
-            chunks,
-        }))
+        Some(Message(MessageInner::Chunked { chunks }))
     }
 
     fn peek_magic_bytes(src: &[u8]) -> Option<[u8; 2]> {
@@ -245,9 +248,10 @@ impl Message {
     fn compression(&self) -> Option<Compression> {
         match &self.0 {
             MessageInner::Single { compression, .. } => *compression,
-            MessageInner::Chunked { chunks } => {
-                unimplemented!("detect compression from first chunk")
-            }
+            MessageInner::Chunked { chunks } => chunks
+                .first()
+                .and_then(|chunk| Self::peek_magic_bytes(&chunk))
+                .and_then(Compression::detect),
         }
     }
 }
@@ -315,6 +319,10 @@ impl Read for ChunkRead {
     fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
         match &mut self.msg {
             MessageInner::Single { bytes, .. } => {
+                if b.len() == 0 {
+                    return Ok(0);
+                }
+
                 let readable = &bytes[self.cursor..];
 
                 let read = cmp::min(readable.len(), b.len());
@@ -324,7 +332,31 @@ impl Read for ChunkRead {
                 Ok(read)
             }
             MessageInner::Chunked { chunks, .. } => {
-                unimplemented!("read chunked payload");
+                let mut b = b;
+                let mut total = 0;
+
+                while b.len() > 0 {
+                    if let Some(bytes) = chunks.get(self.chunk) {
+                        let readable = &bytes[self.cursor..];
+
+                        let read = cmp::min(readable.len(), b.len());
+                        b[0..read].copy_from_slice(&readable[0..read]);
+
+                        if read == readable.len() {
+                            self.chunk += 1;
+                            self.cursor = 0;
+                        } else {
+                            self.cursor += read;
+                        }
+
+                        total += read;
+                        b = &mut b[read..];
+                    } else {
+                        break;
+                    }
+                }
+
+                Ok(total)
             }
         }
     }
@@ -537,5 +569,85 @@ mod tests {
         });
 
         assert_eq!(expected, msg);
+    }
+
+    #[test]
+    fn read_message_chunked_uncompressed() {
+        let mut gelf = Gelf::new(Default::default());
+
+        gelf.decode(&mut chunk(0, 0, 3, b"Hello"))
+            .expect("failed to decode message");
+
+        gelf.decode(&mut chunk(0, 2, 3, b"!"))
+            .expect("failed to decode message");
+
+        let mut msg = gelf
+            .decode(&mut chunk(0, 1, 3, b" World"))
+            .expect("failed to decode message")
+            .expect("missing message value")
+            .into_reader()
+            .expect("failed to build reader");
+
+        let mut read = String::new();
+        msg.read_to_string(&mut read)
+            .expect("failed to read message");
+
+        assert_eq!("Hello World!", read);
+    }
+
+    #[test]
+    fn read_message_chunked_zlib() {
+        let mut buf = zlib(b"Hello World!");
+
+        let (mut chunk_1, mut chunk_2, mut chunk_3) = (&buf[0..2], &buf[2..4], &buf[4..]);
+
+        let mut gelf = Gelf::new(Default::default());
+
+        gelf.decode(&mut chunk(0, 0, 3, chunk_1))
+            .expect("failed to decode message");
+
+        gelf.decode(&mut chunk(0, 2, 3, chunk_3))
+            .expect("failed to decode message");
+
+        let mut msg = gelf
+            .decode(&mut chunk(0, 1, 3, chunk_2))
+            .expect("failed to decode message")
+            .expect("missing message value")
+            .into_reader()
+            .expect("failed to build reader");
+
+        let mut read = String::new();
+        msg.read_to_string(&mut read)
+            .expect("failed to read message");
+
+        assert_eq!("Hello World!", read);
+    }
+
+    #[test]
+    fn read_message_chunked_gzip() {
+        let mut buf = gzip(b"Hello World!");
+
+        let (mut chunk_1, mut chunk_2, mut chunk_3) = (&buf[0..2], &buf[2..4], &buf[4..]);
+
+        let mut gelf = Gelf::new(Default::default());
+
+        gelf.decode(&mut chunk(0, 0, 3, chunk_1))
+            .expect("failed to decode message");
+
+        gelf.decode(&mut chunk(0, 2, 3, chunk_3))
+            .expect("failed to decode message");
+
+        let mut msg = gelf
+            .decode(&mut chunk(0, 1, 3, chunk_2))
+            .expect("failed to decode message")
+            .expect("missing message value")
+            .into_reader()
+            .expect("failed to build reader");
+
+        let mut read = String::new();
+        msg.read_to_string(&mut read)
+            .expect("failed to read message");
+
+        assert_eq!("Hello World!", read);
     }
 }
