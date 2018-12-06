@@ -60,6 +60,8 @@ impl Decoder for Gelf {
         let magic = Message::peek_magic_bytes(&src);
 
         if magic == Some(Message::MAGIC_CHUNKED) {
+            // TODO: Implement timeouts
+
             let header = ChunkHeader::get(&mut src)?;
 
             // If the message is just a single chunk we can treat it
@@ -597,9 +599,9 @@ mod tests {
 
     #[test]
     fn read_message_chunked_zlib() {
-        let mut buf = zlib(b"Hello World!");
+        let buf = zlib(b"Hello World!");
 
-        let (mut chunk_1, mut chunk_2, mut chunk_3) = (&buf[0..2], &buf[2..4], &buf[4..]);
+        let (chunk_1, chunk_2, chunk_3) = (&buf[0..2], &buf[2..4], &buf[4..]);
 
         let mut gelf = Gelf::new(Default::default());
 
@@ -625,9 +627,9 @@ mod tests {
 
     #[test]
     fn read_message_chunked_gzip() {
-        let mut buf = gzip(b"Hello World!");
+        let buf = gzip(b"Hello World!");
 
-        let (mut chunk_1, mut chunk_2, mut chunk_3) = (&buf[0..2], &buf[2..4], &buf[4..]);
+        let (chunk_1, chunk_2, chunk_3) = (&buf[0..2], &buf[2..4], &buf[4..]);
 
         let mut gelf = Gelf::new(Default::default());
 

@@ -1,6 +1,14 @@
-use std::{error, fmt, io::Read, ops::Deref};
+use std::{
+    error, fmt,
+    io::Read,
+    ops::Deref,
+    time::{Duration, SystemTime},
+};
 
-use serde::de::{self, Deserialize, Deserializer, Visitor};
+use serde::{
+    de::{self, Deserialize, Deserializer, Visitor},
+    ser::{Serialize, Serializer},
+};
 
 use inlinable_string::{InlineString, INLINE_STRING_CAPACITY};
 use serde_json::Value;
@@ -36,26 +44,105 @@ impl Process {
 
     pub fn read_as_clef(&self, msg: impl MemRead) -> Result<(), Error> {
         if let Some(bytes) = msg.bytes() {
-            let mut value: Gelf<&str> = serde_json::from_slice(bytes)?;
+            let value: Gelf<&str> = serde_json::from_slice(bytes)?;
 
-            println!("borrowed: {:?}", value);
-            println!("clef: {:?}", value.to_clef());
+            if let Ok(clef) = serde_json::to_string(&value.to_clef()) {
+                println!("{}", clef);
+            }
         } else {
-            let mut value: Gelf<Inlinable<CachedString>, String> =
+            let value: Gelf<Inlinable<CachedString>, String> =
                 serde_json::from_reader(msg.into_reader()?)?;
 
-            println!("owned: {:?}", value);
-            println!("clef: {:?}", value.to_clef());
+            if let Ok(clef) = serde_json::to_string(&value.to_clef()) {
+                println!("{}", clef);
+            }
         }
 
         Ok(())
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 struct Clef<'a> {
     #[serde(rename = "@m")]
-    message: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<&'a str>,
+    #[serde(rename = "@mt")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    template: Option<&'a str>,
+    #[serde(rename = "@t")]
+    timestamp: Option<Timestamp>,
+}
+
+#[derive(Debug)]
+struct Timestamp(SystemTime);
+
+impl Timestamp {
+    fn now() -> Self {
+        Timestamp(SystemTime::now())
+    }
+
+    fn from_float(ts: f64) -> Self {
+        let secs = ts.trunc() as u64;
+        let millis = ts.fract() as u32;
+
+        Timestamp(SystemTime::UNIX_EPOCH + Duration::new(secs, millis))
+    }
+}
+
+impl Serialize for Timestamp {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.collect_str(&humantime::format_rfc3339_nanos(self.0))
+    }
+}
+
+impl<'de> Deserialize<'de> for Timestamp {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct StringVisitor;
+
+        impl<'de> Visitor<'de> for StringVisitor {
+            type Value = Timestamp;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("an RFC3339 formatted string")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                let ts = humantime::parse_rfc3339(value).map_err(|e| E::custom(e))?;
+
+                Ok(Timestamp(ts))
+            }
+        }
+
+        deserializer.deserialize_str(StringVisitor)
+    }
+}
+
+impl<'a> Clef<'a> {
+    fn from_message(msg: &'a str) -> Self {
+        Clef {
+            message: Some(msg),
+            template: None,
+            timestamp: None,
+        }
+    }
+
+    fn maybe_from_json(json: &'a str) -> Option<Self> {
+        if json.chars().next() == Some('{') {
+            serde_json::from_str(json).ok()
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,13 +182,23 @@ where
     TMessage: AsRef<str>,
 {
     fn to_clef(&self) -> Clef {
-        Clef {
-            message: self
-                .full_message
-                .as_ref()
-                .map(|s| s.as_ref())
-                .unwrap_or_else(|| self.short_message.as_ref()),
-        }
+        let message = self
+            .full_message
+            .as_ref()
+            .map(|s| s.as_ref())
+            .unwrap_or_else(|| self.short_message.as_ref());
+
+        let mut clef =
+            Clef::maybe_from_json(message).unwrap_or_else(|| Clef::from_message(message));
+
+        clef.timestamp = self
+            .timestamp
+            .map(Timestamp::from_float)
+            .or_else(|| Some(Timestamp::now()));
+
+        // TODO: Add @t and other properties
+
+        clef
     }
 }
 
