@@ -35,9 +35,9 @@ pub(super) struct Message<'a> {
     pub(super) gelf: Gelf<'a>,
 
     // Common container properties
-    #[serde(skip_serializing_if = "Container::is_empty")]
+    #[serde(skip_serializing_if = "Docker::is_empty")]
     #[serde(default)]
-    pub(super) container: Container<'a>,
+    pub(super) docker: Docker<'a>,
 
     // Everything else
     #[serde(flatten)]
@@ -70,7 +70,7 @@ impl<'a> Gelf<'a> {
 }
 
 #[derive(Default, Debug, Serialize, Deserialize)]
-pub(super) struct Container<'a> {
+pub(super) struct Docker<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(borrow)]
     pub(super) container_id: Option<Str<'a>>,
@@ -94,11 +94,11 @@ pub(super) struct Container<'a> {
     pub(super) tag: Option<Str<'a>>,
 }
 
-impl<'a> Container<'a> {
+impl<'a> Docker<'a> {
     fn is_empty(&self) -> bool {
         #![deny(unused_variables)]
 
-        let Container {
+        let Docker {
             ref container_id,
             ref command,
             ref container_name,
@@ -152,7 +152,7 @@ impl Serialize for Timestamp {
         where
             S: Serializer,
     {
-        serializer.collect_str(&humantime::format_rfc3339_nanos(self.0))
+        serializer.collect_str(&humantime::format_rfc3339(self.0))
     }
 }
 
@@ -191,7 +191,7 @@ impl<'a> Message<'a> {
             template: None,
             timestamp: None,
             gelf: Gelf::default(),
-            container: Container::default(),
+            docker: Docker::default(),
             additional: None,
             level: None,
         }

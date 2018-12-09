@@ -117,13 +117,13 @@ impl<TString, TMessage> gelf::Message<TString, TMessage>
         clef.gelf.full_message = full_message.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
 
         // Set the container environment
-        clef.container.container_id = container_id.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-        clef.container.command = command.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-        clef.container.container_name = container_name.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-        clef.container.created = created.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-        clef.container.image_name = image_name.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-        clef.container.image_id = image_id.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-        clef.container.tag = tag.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
+        clef.docker.container_id = container_id.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
+        clef.docker.command = command.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
+        clef.docker.container_name = container_name.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
+        clef.docker.created = created.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
+        clef.docker.image_name = image_name.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
+        clef.docker.image_id = image_id.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
+        clef.docker.tag = tag.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
 
         // Set any additional properties
         if let Some(additional) = self.additional() {
@@ -222,7 +222,7 @@ mod tests {
         let clef = json!({
             "@l": "Info",
             "@m": "A short message that helps you identify what is going on",
-            "@t": "2013-11-21T17:11:02.000000000Z",
+            "@t": "2013-11-21T17:11:02Z",
             "user_id": 4000
         });
 
@@ -230,10 +230,17 @@ mod tests {
             "version": "1.1",
             "host": "example.org",
             "short_message": clef.to_string(),
+            "full_message": "Backtrace here",
             "level": 1,
             "_user_id": 9001,
             "_some_info": "foo",
-            "_some_env_var": "bar"
+            "_some_env_var": "bar",
+            "_container_id": "abcdefghijklmnopqrstuv",
+            "_command": "run",
+            "_container_name": "test-container",
+            "_image_name": "test/image",
+            "_image_id": "abcdefghijklmnopqrstuv",
+            "_tag": "latest"
         });
 
         let process = Process::new(Default::default());
@@ -243,10 +250,18 @@ mod tests {
                 let expected = json!({
                     "@l": "Info",
                     "@m": "A short message that helps you identify what is going on",
-                    "@t": "2013-11-21T17:11:02.000000000Z",
+                    "@t": "2013-11-21T17:11:02Z",
                     "some_env_var": "bar",
                     "some_info": "foo",
                     "user_id": 4000,
+                    "docker": {
+                        "container_id": "abcdefghijklmnopqrstuv",
+                        "command": "run",
+                        "container_name": "test-container",
+                        "image_name": "test/image",
+                        "image_id": "abcdefghijklmnopqrstuv",
+                        "tag": "latest"
+                    },
                     "gelf": {
                         "host": "example.org",
                         "full_message": "Backtrace here"
