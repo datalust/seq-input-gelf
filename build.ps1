@@ -52,6 +52,10 @@ function Get-Cli
     Write-BeginStep $MYINVOCATION
 
     $cliVersion = "5.0.165"
+    if (Test-Path env:CLI_VERSION) {
+        $cliVersion = $env:CLI_VERSION
+    }
+
     $downloadUri = "https://github.com/datalust/seqcli/releases/download/v$cliVersion/seqcli-$cliVersion-linux-x64.tar.gz"
     Write-Output "Downloading from $downloadUri"
 
@@ -75,8 +79,8 @@ function Invoke-NativeBuild
     Write-BeginStep $MYINVOCATION
 
     if ($IsCIBuild) {
-        $hostShare = "X:\host\src"
-        pushd $hostShare
+        $hostShare = "X:\host"
+        pushd "$hostShare/src"
     }
 
     & "./ci/native/cross-build.ps1" 2>&1

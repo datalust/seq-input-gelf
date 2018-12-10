@@ -3,6 +3,10 @@ skip_tags: true
 image: Visual Studio 2017
 test: off
 
+environment:
+  CLI_VERSION: '5.0.165'
+  RUST_TOOLCHAIN: 'stable'
+
 init:
   - git config --global core.longpaths true
 
