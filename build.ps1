@@ -26,9 +26,6 @@ function Initialize-Docker
         
         docker-switch-linux
         if ($LASTEXITCODE) { exit 1 }
-        
-        echo "$env:DOCKER_TOKEN" | docker login -u $env:DOCKER_USER --password-stdin
-        if ($LASTEXITCODE) { exit 1 }
     }
 }
 
