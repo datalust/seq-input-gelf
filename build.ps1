@@ -97,18 +97,13 @@ $ErrorActionPreference = "Stop"
 Push-Location $PSScriptRoot
 
 $suffix = $null
-if ($IsCIBuild) {
-    $suffix = $(Get-Content ./version_suffix.txt)
-    if ($suffix -ne $null) {
-        $suffix = $suffix.Trim()
-    }
-} else {
-    $suffix = "local"
+if (!$IsCIBuild) {
+    $suffix = "-local"
 }
 
 $semver = $shortver
 if ($suffix) {
-    $semver = "$shortver-$suffix"
+    $semver = "$shortver$suffix"
 }
 
 $version = "$shortver.0"
