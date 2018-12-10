@@ -1,0 +1,13 @@
+version: '1.0.{build}'
+skip_tags: true
+image: Visual Studio 2017
+test: off
+
+init:
+  - git config --global core.longpaths true
+
+build_script:
+- ps: ./build.ps1 -shortver "$($env:APPVEYOR_BUILD_VERSION)"
+
+artifacts:
+- path: publish\*
