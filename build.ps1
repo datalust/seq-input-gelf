@@ -47,54 +47,6 @@ function Initialize-HostShare
     }
 }
 
-function Get-Cli
-{
-    Write-BeginStep $MYINVOCATION
-
-    $cliVersion = "5.0.165"
-    if (Test-Path env:CLI_VERSION) {
-        $cliVersion = $env:CLI_VERSION
-    }
-
-    $downloadUri = "https://github.com/datalust/seqcli/releases/download/v$cliVersion/seqcli-$cliVersion-linux-x64.tar.gz"
-    
-    Remove-Item ./seqcli* -Force -Recurse
-
-    Write-Output "Downloading from $downloadUri"
-
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-    try
-    {
-        $response = Invoke-WebRequest -Uri $downloadUri
-
-        Write-Output ($response | Format-Table | Out-String)
-    }
-    catch
-    {
-        $e = $_.Exception
-        $msg = $e.Message
-
-        while ($e.InnerException) {
-            $e = $e.InnerException
-            $msg += "`n" + $e.Message
-        }
-
-        Write-Output "$_"
-        Write-Output "web request failed: $msg"
-
-        exit 1
-    }
-
-    & ./ci/tool/7-zip/7za.exe e seqcli.tar.gz -o "./"
-    if ($LASTEXITCODE) { exit 1 }
-
-    & ./ci/tool/7-zip/7za.exe x "seqcli-$cliVersion-linux-x64.tar" -o "./"
-    if ($LASTEXITCODE) { exit 1 }
-
-    Rename-Item "./seqcli-$cliVersion-linux-x64" "./seqcli"
-}
-
 function Invoke-NativeBuild
 {
     Write-BeginStep $MYINVOCATION
@@ -132,7 +84,6 @@ $version = "$shortver.0"
 
 Initialize-Docker
 Initialize-HostShare
-Get-Cli
 Invoke-NativeBuild
 
 ls .
