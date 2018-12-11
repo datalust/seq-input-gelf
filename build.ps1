@@ -78,8 +78,11 @@ function Publish-Container($version)
     & docker tag sqelf-ci:latest datalust/sqelf-ci:$version
     if ($LASTEXITCODE) { exit 1 }
 
-    echo "$env:DOCKER_TOKEN" | docker login -u $env:DOCKER_USER --password-stdin
-    if ($LASTEXITCODE) { exit 1 }
+    if ($IsCIBuild)
+    {
+        echo "$env:DOCKER_TOKEN" | docker login -u $env:DOCKER_USER --password-stdin
+        if ($LASTEXITCODE) { exit 1 }
+    }
 
     & docker push datalust/sqelf-ci:$version
     if ($LASTEXITCODE) { exit 1 }
@@ -95,9 +98,9 @@ Initialize-HostShare
 Invoke-NativeBuild
 Build-Container
 
-if ($IsPublishedBuild) {
+# if ($IsPublishedBuild) {
     Publish-Container $version
-}
-else {
-    Write-Output "Not publishing Docker container"
-}
+# }
+# else {
+#     Write-Output "Not publishing Docker container"
+# }
