@@ -65,11 +65,23 @@ function Invoke-NativeBuild
     }
 }
 
-function Build-Container($semver)
+function Build-Container
 {
     Write-BeginStep $MYINVOCATION
 
-    & docker build --file dockerfiles/Dockerfile -t datalust/sqelf-ci:$semver .
+    & docker build --file dockerfiles/Dockerfile -t sqelf-ci:latest .
+    if ($LASTEXITCODE) { exit 1 }
+}
+
+function Publish-Container($semver)
+{
+    & docker tag sqelf-ci:latest datalust/sqelf-ci:$semver
+    if ($LASTEXITCODE) { exit 1 }
+
+    echo "$env:DOCKER_TOKEN" | docker login -u $env:DOCKER_USER --password-stdin
+    if ($LASTEXITCODE) { exit 1 }
+
+    & docker push datalust/sqelf-ci:$semver
     if ($LASTEXITCODE) { exit 1 }
 }
 
@@ -91,4 +103,11 @@ $version = "$shortver.0"
 Initialize-Docker
 Initialize-HostShare
 Invoke-NativeBuild
-Build-Container($semver)
+Build-Container
+
+if ($IsPublishedBuild) {
+    Publish-Container $semver
+}
+else {
+    Write-Output "Not publishing Docker container"
+}
