@@ -104,7 +104,7 @@ function Invoke-NativeBuild
     & "./ci/native/cross-build.ps1" 2>&1
     if ($LASTEXITCODE) { exit 1 }
     
-    $ErrorActionPreference = "Stop"
+    # $ErrorActionPreference = "Stop"
 
     if ($IsCIBuild) {
         popd
@@ -112,7 +112,7 @@ function Invoke-NativeBuild
     }
 }
 
-$ErrorActionPreference = "Stop"
+# $ErrorActionPreference = "Stop"
 Push-Location $PSScriptRoot
 
 $suffix = $null
