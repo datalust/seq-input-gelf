@@ -59,15 +59,13 @@ function Invoke-NativeBuild
     & "./ci/native/cross-build.ps1" 2>&1
     if ($LASTEXITCODE) { exit 1 }
     
-    # $ErrorActionPreference = "Stop"
-
     if ($IsCIBuild) {
         popd
         Copy-Item -Path "$hostShare/src/target" -Recurse -Destination . -Container
     }
 }
 
-# $ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Stop"
 Push-Location $PSScriptRoot
 
 $suffix = $null
