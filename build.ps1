@@ -98,9 +98,9 @@ Initialize-HostShare
 Invoke-NativeBuild
 Build-Container
 
-# if ($IsPublishedBuild) {
+if ($IsPublishedBuild) {
     Publish-Container $version
-# }
-# else {
-#     Write-Output "Not publishing Docker container"
-# }
+}
+else {
+    Write-Output "Not publishing Docker container"
+}
