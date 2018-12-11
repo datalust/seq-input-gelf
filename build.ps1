@@ -73,30 +73,20 @@ function Build-Container
     if ($LASTEXITCODE) { exit 1 }
 }
 
-function Publish-Container($semver)
+function Publish-Container($version)
 {
-    & docker tag sqelf-ci:latest datalust/sqelf-ci:$semver
+    & docker tag sqelf-ci:latest datalust/sqelf-ci:$version
     if ($LASTEXITCODE) { exit 1 }
 
     echo "$env:DOCKER_TOKEN" | docker login -u $env:DOCKER_USER --password-stdin
     if ($LASTEXITCODE) { exit 1 }
 
-    & docker push datalust/sqelf-ci:$semver
+    & docker push datalust/sqelf-ci:$version
     if ($LASTEXITCODE) { exit 1 }
 }
 
 $ErrorActionPreference = "Stop"
 Push-Location $PSScriptRoot
-
-$suffix = $null
-if (!$IsCIBuild) {
-    $suffix = "-local"
-}
-
-$semver = $shortver
-if ($suffix) {
-    $semver = "$shortver$suffix"
-}
 
 $version = "$shortver.0"
 
@@ -106,7 +96,7 @@ Invoke-NativeBuild
 Build-Container
 
 if ($IsPublishedBuild) {
-    Publish-Container $semver
+    Publish-Container $version
 }
 else {
     Write-Output "Not publishing Docker container"
