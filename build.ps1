@@ -57,15 +57,18 @@ function Get-Cli
     }
 
     $downloadUri = "https://github.com/datalust/seqcli/releases/download/v$cliVersion/seqcli-$cliVersion-linux-x64.tar.gz"
-    Write-Output "Downloading from $downloadUri"
-
+    
     Remove-Item ./seqcli* -Force -Recurse
+
+    Write-Output "Downloading from $downloadUri"
 
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
     try
     {
-        Invoke-WebRequest -OutFile seqcli.tar.gz -Uri $downloadUri
+        $response = Invoke-WebRequest -Uri $downloadUri
+
+        Write-Output ($response | Format-Table | Out-String)
     }
     catch
     {
