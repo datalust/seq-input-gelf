@@ -62,8 +62,26 @@ function Get-Cli
     Remove-Item ./seqcli* -Force -Recurse
 
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Invoke-WebRequest -OutFile seqcli.tar.gz -Uri $downloadUri
-    if ($LASTEXITCODE) { exit 1 }
+
+    try
+    {
+        Invoke-WebRequest -OutFile seqcli.tar.gz -Uri $downloadUri
+    }
+    catch
+    {
+        $e = $_.Exception
+        $msg = $e.Message
+
+        while ($e.InnerException) {
+            $e = $e.InnerException
+            $msg += "`n" + $e.Message
+        }
+
+        Write-Output "$_"
+        Write-Output "web request failed: $msg"
+
+        exit 1
+    }
 
     & ./ci/tool/7-zip/7za.exe e seqcli.tar.gz -o "./"
     if ($LASTEXITCODE) { exit 1 }
