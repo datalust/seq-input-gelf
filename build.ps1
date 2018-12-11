@@ -65,6 +65,14 @@ function Invoke-NativeBuild
     }
 }
 
+function Build-Container($semver)
+{
+    Write-BeginStep $MYINVOCATION
+
+    & docker build --file dockerfiles/Dockerfile -t datalust/sqelf-ci:$semver .
+    if ($LASTEXITCODE) { exit 1 }
+}
+
 $ErrorActionPreference = "Stop"
 Push-Location $PSScriptRoot
 
@@ -83,5 +91,4 @@ $version = "$shortver.0"
 Initialize-Docker
 Initialize-HostShare
 Invoke-NativeBuild
-
-ls .
+Build-Container($semver)
