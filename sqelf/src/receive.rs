@@ -127,19 +127,16 @@ impl Gelf {
 
         let header = ChunkHeader::get(&mut src)?;
 
-        // If the message is just a single chunk we can treat it
-        // like an unchunked message.
         match (header.seq_num, header.seq_count) {
+            // If the message is just a single chunk we can treat it
+            // like an unchunked message.
             (0, 1) => {
                 let magic = Message::peek_magic_bytes(&src);
 
                 return Ok(Message::single(magic.and_then(Compression::detect), src));
             },
-            (seq_num, seq_count) if seq_num >= seq_count => {
-                bail!("too many chunks")
-            },
             (_, seq_count) if seq_count > self.config.max_chunks_per_message => {
-                bail!("too many chunks")
+                bail!("message expects {} chunks but the max allowed is {}", seq_count, self.config.max_chunks_per_message, )
             }
             _ => (),
         }
@@ -166,7 +163,7 @@ impl Gelf {
 
                 // Ensure the expected number of chunks is correct
                 if chunks.expected_total != header.seq_count {
-                    bail!("invalid sequence count");
+                    bail!("chunk expected total {} is not consistent with previous value {}", header.seq_count, chunks.expected_total);
                 }
 
                 chunks.insert(chunk);
@@ -276,7 +273,7 @@ impl ChunkHeader {
 
     fn get(buf: &mut Bytes) -> Result<Self, Error> {
         if buf.len() < Self::SIZE {
-            bail!("too small")
+            bail!("buffer is too small to contain a valid chunk header")
         }
 
         let mut buf = buf.split_to(Self::SIZE).into_buf();
@@ -288,7 +285,7 @@ impl ChunkHeader {
         let seq_count = buf.get_u8();
 
         if seq_num >= seq_count {
-            bail!("invalid sequence")
+            bail!("expected {} chunks but got {}", seq_count, seq_num)
         }
 
         Ok(ChunkHeader {
