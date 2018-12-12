@@ -134,7 +134,7 @@ impl Timestamp {
         // If the timestamp is before the epoch
         // then just return the epoch
         if ts.is_sign_negative() {
-            return Timestamp(SystemTime::UNIX_EPOCH)
+            return Timestamp(SystemTime::UNIX_EPOCH);
         }
 
         let secs = ts.trunc() as u64;
@@ -149,8 +149,8 @@ impl Timestamp {
 
 impl Serialize for Timestamp {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+    where
+        S: Serializer,
     {
         serializer.collect_str(&humantime::format_rfc3339(self.0))
     }
@@ -158,8 +158,8 @@ impl Serialize for Timestamp {
 
 impl<'de> Deserialize<'de> for Timestamp {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         struct StringVisitor;
 
@@ -171,8 +171,8 @@ impl<'de> Deserialize<'de> for Timestamp {
             }
 
             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-                where
-                    E: de::Error,
+            where
+                E: de::Error,
             {
                 let ts = humantime::parse_rfc3339(value).map_err(|e| E::custom(e))?;
 

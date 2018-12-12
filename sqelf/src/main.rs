@@ -4,56 +4,39 @@ extern crate serde_derive;
 pub mod io;
 pub mod process;
 pub mod receive;
+pub mod server;
 
-use std::{error, net::SocketAddr};
+use std::error;
 
-use tokio::{
-    net::udp::{UdpFramed, UdpSocket},
-    prelude::*,
-};
-
-use futures::{future::lazy, sync::mpsc};
-
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Config {
     pub receive: receive::Config,
     pub process: process::Config,
+    pub server: server::Config,
+}
+
+impl Config {
+    fn get() -> Self {
+        // NOTE: We'll want to read config from the env
+        Config::default()
+    }
 }
 
 fn main() -> Result<(), Box<error::Error>> {
-    let config = Config::default();
-
+    let config = Config::get();
     eprintln!("{:#?}", config);
 
-    let addr: SocketAddr = config.receive.bind.parse()?;
-    let sock = UdpSocket::bind(&addr)?;
+    // The receiver for GELF messages
+    let receive = receive::build(config.receive);
 
-    let (tx, rx) = mpsc::channel(config.process.unprocessed_capacity);
+    // The processor for converting GELF into CLEF
+    let process = {
+        let process = process::build(config.process);
+        move |msg| process.read_as_clef(msg)
+    };
 
-    let server = lazy(move || {
-        // Spawn a background task to process events
-        let process = process::Process::new(config.process);
-        tokio::spawn(lazy(move || {
-            rx.for_each(move |msg| {
-                let read_as_clef = |msg: receive::Message| {
-                    process.read_as_clef(msg)?;
-
-                    Ok(())
-                };
-
-                read_as_clef(msg).map_err(|e: receive::Error| eprintln!("{}", e))
-            })
-        }));
-
-        // Accept and process incoming GELF messages over UDP
-        UdpFramed::new(sock, receive::Gelf::new(config.receive))
-            .for_each(move |(msg, _)| {
-                let tx = tx.clone();
-
-                tx.send(msg).map(|_| ()).map_err(Into::into)
-            })
-            .map_err(|e| eprintln!("{}", e))
-    });
+    // The server that drives the receiver and processor
+    let server = server::build(config.server, receive, process)?;
 
     tokio::run(server);
 

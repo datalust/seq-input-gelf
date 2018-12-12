@@ -5,8 +5,8 @@ use std::{
     time::{self, Duration, SystemTime},
 };
 
-use failure::bail;
 use bytes::{Buf, Bytes, BytesMut, IntoBuf};
+use failure::bail;
 use libflate::{gzip, zlib};
 use tokio::codec::Decoder;
 
@@ -14,23 +14,49 @@ use crate::io::MemRead;
 
 pub type Error = failure::Error;
 
-#[derive(Debug)]
+/**
+GELF receiver configuration.
+*/
+#[derive(Debug, Clone)]
 pub struct Config {
-    pub bind: String,
+    /**
+    The maximum number of incomplete chunked messages.
+
+    If this value is reached then *all* incomplete messages
+    will be dropped.
+    */
     pub incomplete_capacity: usize,
+    /**
+    The maximum number of chunks for a single chunked message.
+
+    Messages with more than this value will be discarded.
+    */
     pub max_chunks_per_message: u8,
+    /**
+    The timeout in milliseconds for all chunks in a chunked
+    message to arrive.
+
+    The timeout starts from when the first chunk is received, and
+    does not reset as subsequent chunks arrive.
+    */
     pub incomplete_timeout_ms: u64,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
-            bind: "0.0.0.0:12201".to_owned(),
             incomplete_capacity: 1024,
             max_chunks_per_message: 128,
             incomplete_timeout_ms: 5 * 1000,
         }
     }
+}
+
+/**
+Build a GELF decoder to receive messages.
+*/
+pub fn build(config: Config) -> Gelf {
+    Gelf::new(config)
 }
 
 /**
@@ -55,7 +81,7 @@ struct ById {
 impl ById {
     fn new() -> Self {
         ById {
-            chunks: HashMap::new()
+            chunks: HashMap::new(),
         }
     }
 }
@@ -103,18 +129,55 @@ impl Gelf {
         }
     }
 
-    fn push_chunk(&mut self, mut src: Bytes) -> Result<Option<Message>, Error> {
-        // If the chunked event buffer is full, then clear it
-        // This will drop all incomplete events it currently contains
+    fn chunked(&mut self, mut src: Bytes) -> Result<Option<Message>, Error> {
+        // Perform any cleanup needed
+        self.gc()?;
+
+        match ChunkHeader::get(&mut src)? {
+            // If the message is just a single chunk we can treat it
+            // like an unchunked message
+            ChunkHeader {
+                seq_num: 0,
+                seq_count: 1,
+                ..
+            } => {
+                let magic = Message::peek_magic_bytes(&src);
+
+                return Ok(Message::single(magic.and_then(Compression::detect), src));
+            }
+            // If the message has too many chunks then discard it
+            ChunkHeader { seq_count, .. } if seq_count > self.config.max_chunks_per_message => {
+                bail!(
+                    "message expects {} chunks but the max allowed is {}",
+                    seq_count,
+                    self.config.max_chunks_per_message,
+                )
+            }
+            // Otherwise push the chunk
+            header => {
+                let chunk = Chunk {
+                    seq: header.seq_num,
+                    bytes: src,
+                };
+
+                self.push(header, chunk)
+            }
+        }
+    }
+
+    fn gc(&mut self) -> Result<(), Error> {
+        // Check the capacity of the incomplete chunk list
         if self.by_id.chunks.len() == self.config.incomplete_capacity {
             self.by_id.chunks.clear();
             self.by_arrival.chunks.clear();
         }
 
         // Check for any expired incomplete messages
-        let since = UniqueTimestamp::since(Duration::from_millis(self.config.incomplete_timeout_ms))?;
+        let since =
+            UniqueTimestamp::since(Duration::from_millis(self.config.incomplete_timeout_ms))?;
 
-        let to_remove: Vec<_> = self.by_arrival
+        let to_remove: Vec<_> = self
+            .by_arrival
             .chunks
             .range_mut(..since)
             .map(|(k, v)| (*k, *v))
@@ -125,27 +188,10 @@ impl Gelf {
             self.by_arrival.chunks.remove(&by_arrival);
         }
 
-        let header = ChunkHeader::get(&mut src)?;
+        Ok(())
+    }
 
-        match (header.seq_num, header.seq_count) {
-            // If the message is just a single chunk we can treat it
-            // like an unchunked message.
-            (0, 1) => {
-                let magic = Message::peek_magic_bytes(&src);
-
-                return Ok(Message::single(magic.and_then(Compression::detect), src));
-            },
-            (_, seq_count) if seq_count > self.config.max_chunks_per_message => {
-                bail!("message expects {} chunks but the max allowed is {}", seq_count, self.config.max_chunks_per_message, )
-            }
-            _ => (),
-        }
-
-        let chunk = Chunk {
-            seq: header.seq_num,
-            bytes: src,
-        };
-
+    fn push(&mut self, header: ChunkHeader, chunk: Chunk) -> Result<Option<Message>, Error> {
         match self.by_id.chunks.entry(header.id) {
             // Begin a new message with the given chunk
             hash_map::Entry::Vacant(entry) => {
@@ -163,7 +209,11 @@ impl Gelf {
 
                 // Ensure the expected number of chunks is correct
                 if chunks.expected_total != header.seq_count {
-                    bail!("chunk expected total {} is not consistent with previous value {}", header.seq_count, chunks.expected_total);
+                    bail!(
+                        "chunk expected total {} is not consistent with previous value {}",
+                        header.seq_count,
+                        chunks.expected_total
+                    );
                 }
 
                 chunks.insert(chunk);
@@ -195,7 +245,7 @@ impl Decoder for Gelf {
             // Push a chunk onto a message
             // If the chunk completes the message then it
             // will be returned
-            self.push_chunk(src)
+            self.chunked(src)
         } else {
             // Return a message containing a single chunk
             Ok(Message::single(magic.and_then(Compression::detect), src))
@@ -481,10 +531,7 @@ impl Compression {
 mod tests {
     use super::*;
 
-    use std::{
-        io::Write,
-        thread,
-    };
+    use std::{io::Write, thread};
 
     use libflate::{gzip, zlib};
 

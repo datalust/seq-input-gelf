@@ -1,5 +1,8 @@
 use std::io;
 
+/**
+A reader that may be a contiguous slice of bytes.
+*/
 pub trait MemRead {
     type Reader: io::Read;
 
