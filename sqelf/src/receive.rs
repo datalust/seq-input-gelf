@@ -1,29 +1,34 @@
 use std::{
     cmp,
     collections::{hash_map, BTreeMap, HashMap},
-    error,
     io::{self, Read},
+    time::{self, Duration, SystemTime},
 };
 
+use failure::bail;
 use bytes::{Buf, Bytes, BytesMut, IntoBuf};
-
 use libflate::{gzip, zlib};
-
 use tokio::codec::Decoder;
 
 use crate::io::MemRead;
 
-pub type Error = Box<error::Error + Send + Sync>;
+pub type Error = failure::Error;
 
 #[derive(Debug)]
 pub struct Config {
     pub bind: String,
+    pub incomplete_capacity: usize,
+    pub max_chunks_per_message: u8,
+    pub incomplete_timeout_ms: u64,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
             bind: "0.0.0.0:12201".to_owned(),
+            incomplete_capacity: 1024,
+            max_chunks_per_message: 128,
+            incomplete_timeout_ms: 5 * 1000,
         }
     }
 }
@@ -37,15 +42,142 @@ of the message itself conforms to the GELF specification.
 */
 #[derive(Debug)]
 pub struct Gelf {
-    chunks: HashMap<u64, Chunks>,
-    arrival: BTreeMap<u64, u64>,
+    config: Config,
+    by_id: ById,
+    by_arrival: ByArrival,
+}
+
+#[derive(Debug)]
+struct ById {
+    chunks: HashMap<u64, (Chunks, UniqueTimestamp)>,
+}
+
+impl ById {
+    fn new() -> Self {
+        ById {
+            chunks: HashMap::new()
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ByArrival {
+    counter: u64,
+    chunks: BTreeMap<UniqueTimestamp, u64>,
+}
+
+impl ByArrival {
+    fn new() -> Self {
+        ByArrival {
+            counter: 0,
+            chunks: BTreeMap::new(),
+        }
+    }
+
+    fn ts(&mut self) -> Result<UniqueTimestamp, Error> {
+        let now = SystemTime::now().duration_since(time::UNIX_EPOCH)?;
+        let counter = self.counter;
+        self.counter.wrapping_add(1);
+
+        Ok(UniqueTimestamp(now, counter))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct UniqueTimestamp(Duration, u64);
+
+impl UniqueTimestamp {
+    fn since(since: Duration) -> Result<Self, Error> {
+        let now = (SystemTime::now() - since).duration_since(time::UNIX_EPOCH)?;
+
+        Ok(UniqueTimestamp(now, 0))
+    }
 }
 
 impl Gelf {
-    pub fn new(_: Config) -> Self {
+    pub fn new(config: Config) -> Self {
         Gelf {
-            chunks: HashMap::new(),
-            arrival: BTreeMap::new(),
+            config,
+            by_id: ById::new(),
+            by_arrival: ByArrival::new(),
+        }
+    }
+
+    fn push_chunk(&mut self, mut src: Bytes) -> Result<Option<Message>, Error> {
+        // If the chunked event buffer is full, then clear it
+        // This will drop all incomplete events it currently contains
+        if self.by_id.chunks.len() == self.config.incomplete_capacity {
+            self.by_id.chunks.clear();
+            self.by_arrival.chunks.clear();
+        }
+
+        // Check for any expired incomplete messages
+        let since = UniqueTimestamp::since(Duration::from_millis(self.config.incomplete_timeout_ms))?;
+
+        let to_remove: Vec<_> = self.by_arrival
+            .chunks
+            .range_mut(..since)
+            .map(|(k, v)| (*k, *v))
+            .collect();
+
+        for (by_arrival, by_id) in to_remove {
+            self.by_id.chunks.remove(&by_id);
+            self.by_arrival.chunks.remove(&by_arrival);
+        }
+
+        let header = ChunkHeader::get(&mut src)?;
+
+        match (header.seq_num, header.seq_count) {
+            // If the message is just a single chunk we can treat it
+            // like an unchunked message.
+            (0, 1) => {
+                let magic = Message::peek_magic_bytes(&src);
+
+                return Ok(Message::single(magic.and_then(Compression::detect), src));
+            },
+            (_, seq_count) if seq_count > self.config.max_chunks_per_message => {
+                bail!("message expects {} chunks but the max allowed is {}", seq_count, self.config.max_chunks_per_message, )
+            }
+            _ => (),
+        }
+
+        let chunk = Chunk {
+            seq: header.seq_num,
+            bytes: src,
+        };
+
+        match self.by_id.chunks.entry(header.id) {
+            // Begin a new message with the given chunk
+            hash_map::Entry::Vacant(entry) => {
+                let ts = self.by_arrival.ts()?;
+                self.by_arrival.chunks.insert(ts, header.id);
+
+                entry.insert((Chunks::new(header.seq_count, chunk), ts));
+
+                Ok(None)
+            }
+            // Add a chunk to an existing message
+            // If the chunk completes the message then return it
+            hash_map::Entry::Occupied(mut entry) => {
+                let &mut (ref mut chunks, _) = entry.get_mut();
+
+                // Ensure the expected number of chunks is correct
+                if chunks.expected_total != header.seq_count {
+                    bail!("chunk expected total {} is not consistent with previous value {}", header.seq_count, chunks.expected_total);
+                }
+
+                chunks.insert(chunk);
+                if chunks.is_complete() {
+                    let (_, (chunks, arrival)) = entry.remove_entry();
+                    self.by_arrival.chunks.remove(&arrival);
+
+                    Ok(Message::chunked(
+                        chunks.inner.into_iter().map(|(_, chunk)| chunk),
+                    ))
+                } else {
+                    Ok(None)
+                }
+            }
         }
     }
 }
@@ -55,52 +187,15 @@ impl Decoder for Gelf {
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let mut src = src.take().freeze();
+        let src = src.take().freeze();
 
         let magic = Message::peek_magic_bytes(&src);
 
         if magic == Some(Message::MAGIC_CHUNKED) {
-            // TODO: Implement timeouts
-
-            let header = ChunkHeader::get(&mut src)?;
-
-            // If the message is just a single chunk we can treat it
-            // like an unchunked message.
-            if header.seq_num == 0 && header.seq_count == 1 {
-                let magic = Message::peek_magic_bytes(&src);
-
-                return Ok(Message::single(magic.and_then(Compression::detect), src));
-            }
-
-            let chunk = Chunk {
-                seq: header.seq_num,
-                bytes: src,
-            };
-
-            match self.chunks.entry(header.id) {
-                // Begin a new message with the given chunk
-                hash_map::Entry::Vacant(entry) => {
-                    entry.insert(Chunks::new(header.seq_count, chunk));
-
-                    Ok(None)
-                }
-                // Add a chunk to an existing message
-                // If the chunk completes the message then return it
-                hash_map::Entry::Occupied(mut entry) => {
-                    let chunks = entry.get_mut();
-
-                    chunks.insert(chunk);
-                    if chunks.is_complete() {
-                        let (_, chunks) = entry.remove_entry();
-
-                        Ok(Message::chunked(
-                            chunks.inner.into_iter().map(|(_, chunk)| chunk),
-                        ))
-                    } else {
-                        Ok(None)
-                    }
-                }
-            }
+            // Push a chunk onto a message
+            // If the chunk completes the message then it
+            // will be returned
+            self.push_chunk(src)
         } else {
             // Return a message containing a single chunk
             Ok(Message::single(magic.and_then(Compression::detect), src))
@@ -178,7 +273,7 @@ impl ChunkHeader {
 
     fn get(buf: &mut Bytes) -> Result<Self, Error> {
         if buf.len() < Self::SIZE {
-            panic!("too small")
+            bail!("buffer is too small to contain a valid chunk header")
         }
 
         let mut buf = buf.split_to(Self::SIZE).into_buf();
@@ -190,7 +285,7 @@ impl ChunkHeader {
         let seq_count = buf.get_u8();
 
         if seq_num >= seq_count {
-            panic!("invalid sequence")
+            bail!("expected {} chunks but got {}", seq_count, seq_num)
         }
 
         Ok(ChunkHeader {
@@ -386,7 +481,10 @@ impl Compression {
 mod tests {
     use super::*;
 
-    use std::io::Write;
+    use std::{
+        io::Write,
+        thread,
+    };
 
     use libflate::{gzip, zlib};
 
@@ -651,5 +749,83 @@ mod tests {
             .expect("failed to read message");
 
         assert_eq!("Hello World!", read);
+    }
+
+    #[test]
+    fn when_capacity_is_reached_all_incomplete_messages_are_dropped() {
+        let mut gelf = Gelf::new(Config {
+            incomplete_capacity: 2,
+            ..Default::default()
+        });
+
+        gelf.decode(&mut chunk(0, 0, 3, b"1"))
+            .expect("failed to decode message");
+
+        gelf.decode(&mut chunk(1, 0, 3, b"2"))
+            .expect("failed to decode message");
+
+        assert_eq!(2, gelf.by_id.chunks.len());
+
+        // Adding another chunk should tip over the capacity threshold
+        // After this, there should only be the last message chunk added
+        gelf.decode(&mut chunk(2, 0, 3, b"2"))
+            .expect("failed to decode message");
+
+        assert_eq!(1, gelf.by_arrival.chunks.len());
+        assert_eq!(1, gelf.by_id.chunks.len());
+        assert_eq!(2, *gelf.by_id.chunks.keys().next().unwrap());
+    }
+
+    #[test]
+    fn when_timeout_expires_incomplete_messages_are_dropped() {
+        let mut gelf = Gelf::new(Config {
+            incomplete_timeout_ms: 2,
+            ..Default::default()
+        });
+
+        gelf.decode(&mut chunk(0, 0, 3, b"1"))
+            .expect("failed to decode message");
+
+        gelf.decode(&mut chunk(1, 0, 3, b"2"))
+            .expect("failed to decode message");
+
+        thread::sleep(Duration::from_millis(5));
+
+        // Adding another chunk should clean up the expired messages
+        // After this, there should only be the last message chunk added
+        gelf.decode(&mut chunk(2, 0, 3, b"2"))
+            .expect("failed to decode message");
+
+        assert_eq!(1, gelf.by_arrival.chunks.len());
+        assert_eq!(1, gelf.by_id.chunks.len());
+        assert_eq!(2, *gelf.by_id.chunks.keys().next().unwrap());
+    }
+
+    #[test]
+    fn adding_chunked_message_with_too_many_chunks_fails() {
+        let mut gelf = Gelf::new(Config {
+            max_chunks_per_message: 1,
+            ..Default::default()
+        });
+
+        // The message says it has 3 chunks, but only 1
+        // chunk is allowed
+        let r = gelf.decode(&mut chunk(0, 0, 3, b"1"));
+
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn adding_more_chunks_than_expected_to_chunked_message_fails() {
+        let mut gelf = Gelf::new(Default::default());
+
+        gelf.decode(&mut chunk(0, 0, 3, b"1"))
+            .expect("failed to decode message");
+
+        // The message says it has 3 chunks, but
+        // the chunk says it is the 4th
+        let r = gelf.decode(&mut chunk(0, 3, 3, b"3"));
+
+        assert!(r.is_err());
     }
 }
