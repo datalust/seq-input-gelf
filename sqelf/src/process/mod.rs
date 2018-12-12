@@ -44,7 +44,7 @@ impl Process {
         with: impl FnOnce(clef::Message) -> Result<(), Error>,
     ) -> Result<(), Error> {
         if let Some(bytes) = msg.bytes() {
-            let value: gelf::Message<Str<String>> = serde_json::from_slice(bytes)?;
+            let value: gelf::Message<Str> = serde_json::from_slice(bytes)?;
 
             with(value.to_clef())
         } else {
