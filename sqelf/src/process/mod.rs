@@ -2,17 +2,13 @@ mod clef;
 mod gelf;
 mod str;
 
-use std::{
-    error,
-};
-
 use serde_json::Value;
 
 use self::str::{Str, Inlinable, CachedString};
 
 use crate::io::MemRead;
 
-pub type Error = Box<error::Error + Send + Sync>;
+pub type Error = failure::Error;
 
 #[derive(Debug)]
 pub struct Config {

@@ -36,3 +36,6 @@ version = "1"
 
 [dependencies.serde_json]
 version = "1"
+
+[dependencies.failure]
+version = "0.1"
