@@ -4,23 +4,29 @@ mod str;
 
 use serde_json::Value;
 
-use self::str::{Str, Inlinable, CachedString};
+use self::str::{CachedString, Inlinable, Str};
 
 use crate::io::MemRead;
 
 pub type Error = failure::Error;
 
-#[derive(Debug)]
-pub struct Config {
-    pub unprocessed_capacity: usize,
-}
+/**
+Configuration for CELF formatting.
+*/
+#[derive(Debug, Clone)]
+pub struct Config {}
 
 impl Default for Config {
     fn default() -> Self {
-        Config {
-            unprocessed_capacity: 1_024,
-        }
+        Config {}
     }
+}
+
+/**
+Build a CLEF processor to handle messages.
+*/
+pub fn build(config: Config) -> Process {
+    Process::new(config)
 }
 
 /**
@@ -63,9 +69,9 @@ impl Process {
 }
 
 impl<TString, TMessage> gelf::Message<TString, TMessage>
-    where
-        TString: AsRef<str>,
-        TMessage: AsRef<str>,
+where
+    TString: AsRef<str>,
+    TMessage: AsRef<str>,
 {
     fn to_clef(&self) -> clef::Message {
         #![deny(unused_variables)]
@@ -115,7 +121,10 @@ impl<TString, TMessage> gelf::Message<TString, TMessage>
         // Set the container environment
         clef.docker.container_id = container_id.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
         clef.docker.command = command.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-        clef.docker.container_name = container_name.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
+        clef.docker.container_name = container_name
+            .as_ref()
+            .map(AsRef::as_ref)
+            .map(Str::Borrowed);
         clef.docker.created = created.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
         clef.docker.image_name = image_name.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
         clef.docker.image_id = image_id.as_ref().map(AsRef::as_ref).map(Str::Borrowed);

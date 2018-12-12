@@ -1,7 +1,4 @@
-use std::{
-    fmt,
-    ops::Deref,
-};
+use std::{fmt, ops::Deref};
 
 use serde::{
     de::{self, Deserialize, Deserializer, Visitor},
@@ -23,8 +20,8 @@ pub(super) enum Str<'a, S = String> {
 }
 
 impl<'a, S> AsRef<str> for Str<'a, S>
-    where
-        S: AsRef<str>,
+where
+    S: AsRef<str>,
 {
     fn as_ref(&self) -> &str {
         match self {
@@ -35,33 +32,33 @@ impl<'a, S> AsRef<str> for Str<'a, S>
 }
 
 impl<'a, T> Serialize for Str<'a, T>
-    where
-        T: Serialize,
+where
+    T: Serialize,
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
+    where
+        S: Serializer,
     {
         match self {
             Str::Borrowed(s) => serializer.serialize_str(s),
-            Str::Owned(ref s) => s.serialize(serializer)
+            Str::Owned(ref s) => s.serialize(serializer),
         }
     }
 }
 
 impl<'de: 'a, 'a, S> Deserialize<'de> for Str<'a, S>
-    where
-        S: From<String>,
+where
+    S: From<String>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         struct StringVisitor<'a, S>(std::marker::PhantomData<Str<'a, S>>);
 
         impl<'de: 'a, 'a, S> Visitor<'de> for StringVisitor<'a, S>
-            where
-                S: From<String>,
+        where
+            S: From<String>,
         {
             type Value = Str<'a, S>;
 
@@ -70,22 +67,22 @@ impl<'de: 'a, 'a, S> Deserialize<'de> for Str<'a, S>
             }
 
             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-                where
-                    E: de::Error,
+            where
+                E: de::Error,
             {
                 Ok(Str::Owned(S::from(value.to_owned())))
             }
 
             fn visit_borrowed_str<E>(self, value: &'de str) -> Result<Self::Value, E>
-                where
-                    E: de::Error,
+            where
+                E: de::Error,
             {
                 Ok(Str::Borrowed(value))
             }
 
             fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
-                where
-                    E: de::Error,
+            where
+                E: de::Error,
             {
                 Ok(Str::Owned(S::from(value)))
             }
@@ -105,8 +102,8 @@ pub(super) enum Inlinable<S> {
 }
 
 impl<S> AsRef<str> for Inlinable<S>
-    where
-        S: AsRef<str>,
+where
+    S: AsRef<str>,
 {
     fn as_ref(&self) -> &str {
         match self {
@@ -117,8 +114,8 @@ impl<S> AsRef<str> for Inlinable<S>
 }
 
 impl<S> Deref for Inlinable<S>
-    where
-        S: Deref<Target = str>,
+where
+    S: Deref<Target = str>,
 {
     type Target = str;
 
@@ -131,18 +128,18 @@ impl<S> Deref for Inlinable<S>
 }
 
 impl<'de, S> Deserialize<'de> for Inlinable<S>
-    where
-        S: for<'a> From<&'a str>,
+where
+    S: for<'a> From<&'a str>,
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
+    where
+        D: Deserializer<'de>,
     {
         struct StringVisitor<S>(std::marker::PhantomData<S>);
 
         impl<'de, S> Visitor<'de> for StringVisitor<S>
-            where
-                S: for<'a> From<&'a str>,
+        where
+            S: for<'a> From<&'a str>,
         {
             type Value = Inlinable<S>;
 
@@ -151,8 +148,8 @@ impl<'de, S> Deserialize<'de> for Inlinable<S>
             }
 
             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-                where
-                    E: de::Error,
+            where
+                E: de::Error,
             {
                 if value.len() > INLINE_STRING_CAPACITY {
                     Ok(Inlinable::Spilled(S::from(value)))
