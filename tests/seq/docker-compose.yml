@@ -1,0 +1,20 @@
+version: '3'
+services:
+  sqelf:
+    image: sqelf-local:latest
+    depends_on:
+      - seq
+    ports:
+      - "12201:12201/udp"
+    environment:
+      SEQ_ADDRESS: "http://seq:5341"
+  seq:
+    image: datalust/seq:latest
+    ports:
+      - "5341:80"
+    environment:
+      ACCEPT_EULA: Y
+networks:
+  default:
+    external:
+      name: seq-net

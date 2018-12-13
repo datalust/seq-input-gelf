@@ -56,7 +56,7 @@ function Invoke-NativeBuild
         pushd "$hostShare/src"
     }
 
-    & "./ci/native/cross-build.ps1" 2>&1
+    & "./ci/cross-build.ps1" 2>&1
     if ($LASTEXITCODE) { exit 1 }
     
     if ($IsCIBuild) {
@@ -89,7 +89,7 @@ function Publish-Container($version)
 }
 
 $ErrorActionPreference = "Stop"
-Push-Location $PSScriptRoot
+Push-Location "$PSScriptRoot/../"
 
 $version = "$shortver.0"
 

@@ -15,7 +15,7 @@ init:
   - git config --global core.longpaths true
 
 build_script:
-- ps: ./build.ps1 -shortver "$($env:APPVEYOR_BUILD_VERSION)"
+- ps: ./ci/build.ps1 -shortver "$($env:APPVEYOR_BUILD_VERSION)"
 
 artifacts:
 - path: publish\*
