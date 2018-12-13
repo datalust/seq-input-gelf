@@ -54,7 +54,13 @@ pub fn build(
     Ok(lazy(move || {
         // Spawn a background task to process events
         tokio::spawn(lazy(move || {
-            rx.for_each(move |msg| handle(msg).map_err(|e: Error| eprintln!("{}", e)))
+            rx.for_each(move |msg| {
+                handle(msg).or_else(|e: Error| {
+                    eprintln!("processing failed: {}", e);
+
+                    Ok(())
+                })
+            })
         }));
 
         // Accept and process incoming GELF messages over UDP
@@ -62,8 +68,16 @@ pub fn build(
             .for_each(move |(msg, _)| {
                 let tx = tx.clone();
 
-                tx.send(msg).map(|_| ()).map_err(Into::into)
+                tx.send(msg).map(|_| ()).or_else(|e| {
+                    eprintln!("sending failed: {}", e);
+
+                    Ok(())
+                })
             })
-            .map_err(|e| eprintln!("{}", e))
+            .or_else(|e| {
+                eprintln!("receiving failed: {}", e);
+
+                Ok(())
+            })
     }))
 }
