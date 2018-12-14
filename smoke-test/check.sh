@@ -1,20 +1,13 @@
-#! /bin/bash
-
-set -e
-
-# Build a local container
-./ci/local-build.sh
-docker image rm -f sqelf-local:latest || true
-docker build --file dockerfiles/Dockerfile -t sqelf-local:latest .
-
 # Start the Seq environment
-pushd tests/seq
-./up.sh
-popd
+docker-compose -p sqelf-test rm -f
+rm -rf seq-data || true
+
+docker-compose -p sqelf-test build
+docker-compose -p sqelf-test up -d
 
 # Build a test app container
 docker image rm -f sqelf-app-test:latest || true
-docker build --file tests/app/Dockerfile -t sqelf-app-test:latest .
+docker build --file smoke-test/app/Dockerfile -t sqelf-app-test:latest .
 
 # Run the test app, pointing to the GELF server
 docker run \
@@ -24,5 +17,12 @@ docker run \
     --log-opt gelf-address=udp://localhost:12201 \
     sqelf-app-test:latest
 
+sleep 2s
+
 # Query the Seq API for events
 curl http://localhost:5341/api/events | json_pp
+
+pushd dockerfiles
+docker-compose -p sqelf-test down
+docker-compose -p sqelf-test rm -f
+popd

@@ -2,5 +2,5 @@
 **/*.rs.bk
 .idea
 
-/seqcli*
 /publish
+seq-data
