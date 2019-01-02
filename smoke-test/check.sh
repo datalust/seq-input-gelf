@@ -20,7 +20,7 @@ docker run \
 sleep 2s
 
 # Query the Seq API for events
-curl http://localhost:5341/api/events | json_pp
+curl http://localhost:5341/api/events?clef
 
 pushd dockerfiles
 docker-compose -p sqelf-test down
