@@ -8,6 +8,8 @@ This repository contains an example `docker-compose` file that can be used to ma
 $ docker-compose -p seq up -d
 ```
 
+The server is also available as a standalone container on Docker Hub as [`datalust/sqelf`](https://hub.docker.com/r/datalust/sqelf).
+
 The output from any Docker container can then be collected by configuring its logging driver on startup:
 
 ```shell
