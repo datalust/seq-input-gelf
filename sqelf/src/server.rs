@@ -6,6 +6,8 @@ use tokio::{
     prelude::*,
 };
 
+use bytes::{Bytes, BytesMut};
+
 use futures::{future::lazy, sync::mpsc};
 
 pub type Error = failure::Error;
@@ -43,8 +45,8 @@ Build a server to receive GELF messages and process them.
 */
 pub fn build(
     config: Config,
-    receive: impl Decoder<Item = Message, Error = Error> + Send + Sync + 'static,
-    handle: impl Fn(Message) -> Result<(), Error> + Send + Sync + 'static,
+    receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static,
+    mut handle: impl FnMut(Message) -> Result<(), Error> + Send + Sync + 'static,
 ) -> Result<impl Future<Item = (), Error = ()>, Error> {
     let addr: SocketAddr = config.bind.parse()?;
     let sock = UdpSocket::bind(&addr)?;
@@ -64,7 +66,7 @@ pub fn build(
         }));
 
         // Accept and process incoming GELF messages over UDP
-        UdpFramed::new(sock, receive)
+        UdpFramed::new(sock, Decode(receive))
             .for_each(move |(msg, _)| {
                 let tx = tx.clone();
 
@@ -80,4 +82,20 @@ pub fn build(
                 Ok(())
             })
     }))
+}
+
+struct Decode<F>(F);
+
+impl<F> Decoder for Decode<F>
+where
+    F: FnMut(Bytes) -> Result<Option<Message>, Error>,
+{
+    type Item = Message;
+    type Error = Error;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let src = src.take().freeze();
+
+        (self.0)(src)
+    }
 }

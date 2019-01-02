@@ -5,10 +5,9 @@ use std::{
     time::{self, Duration, SystemTime},
 };
 
-use bytes::{Buf, Bytes, BytesMut, IntoBuf};
+use bytes::{Buf, Bytes, IntoBuf};
 use failure::bail;
 use libflate::{gzip, zlib};
-use tokio::codec::Decoder;
 
 use crate::io::MemRead;
 
@@ -129,6 +128,20 @@ impl Gelf {
         }
     }
 
+    pub fn decode(&mut self, src: Bytes) -> Result<Option<Message>, Error> {
+        let magic = Message::peek_magic_bytes(&src);
+
+        if magic == Some(Message::MAGIC_CHUNKED) {
+            // Push a chunk onto a message
+            // If the chunk completes the message then it
+            // will be returned
+            self.chunked(src)
+        } else {
+            // Return a message containing a single chunk
+            Ok(Message::single(magic.and_then(Compression::detect), src))
+        }
+    }
+
     fn chunked(&mut self, mut src: Bytes) -> Result<Option<Message>, Error> {
         // Perform any cleanup needed
         self.gc()?;
@@ -228,27 +241,6 @@ impl Gelf {
                     Ok(None)
                 }
             }
-        }
-    }
-}
-
-impl Decoder for Gelf {
-    type Item = Message;
-    type Error = Error;
-
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let src = src.take().freeze();
-
-        let magic = Message::peek_magic_bytes(&src);
-
-        if magic == Some(Message::MAGIC_CHUNKED) {
-            // Push a chunk onto a message
-            // If the chunk completes the message then it
-            // will be returned
-            self.chunked(src)
-        } else {
-            // Return a message containing a single chunk
-            Ok(Message::single(magic.and_then(Compression::detect), src))
         }
     }
 }
@@ -537,7 +529,7 @@ mod tests {
 
     use byteorder::{BigEndian, ByteOrder};
 
-    fn chunk(id: u64, seq_num: u8, seq_total: u8, bytes: &[u8]) -> BytesMut {
+    fn chunk(id: u64, seq_num: u8, seq_total: u8, bytes: &[u8]) -> Bytes {
         let mut header = vec![0x1e, 0x0f];
 
         let mut idb = [0; 8];
@@ -552,7 +544,7 @@ mod tests {
         header.into()
     }
 
-    fn zlib(bytes: &[u8]) -> BytesMut {
+    fn zlib(bytes: &[u8]) -> Bytes {
         let mut encoder = zlib::Encoder::new(Vec::new()).expect("failed to build zlib");
 
         encoder.write_all(bytes).expect("failed to encode bytes");
@@ -564,7 +556,7 @@ mod tests {
             .into()
     }
 
-    fn gzip(bytes: &[u8]) -> BytesMut {
+    fn gzip(bytes: &[u8]) -> Bytes {
         let mut encoder = gzip::Encoder::new(Vec::new()).expect("failed to build gzip");
 
         encoder.write_all(bytes).expect("failed to encode bytes");
@@ -581,7 +573,7 @@ mod tests {
         let mut gelf = Gelf::new(Default::default());
 
         let msg = gelf
-            .decode(&mut BytesMut::from(b"" as &[u8]))
+            .decode(Bytes::from(b"" as &[u8]))
             .expect("failed to decode message");
 
         assert!(msg.is_none());
@@ -592,7 +584,7 @@ mod tests {
         let mut gelf = Gelf::new(Default::default());
 
         let msg = gelf
-            .decode(&mut BytesMut::from(b"Hello!" as &[u8]))
+            .decode(Bytes::from(b"Hello!" as &[u8]))
             .expect("failed to decode message")
             .expect("missing message value");
 
@@ -609,7 +601,7 @@ mod tests {
         let mut gelf = Gelf::new(Default::default());
 
         let mut msg = gelf
-            .decode(&mut BytesMut::from(b"Hello!" as &[u8]))
+            .decode(Bytes::from(b"Hello!" as &[u8]))
             .expect("failed to decode message")
             .expect("missing message value")
             .into_reader()
@@ -627,7 +619,7 @@ mod tests {
         let mut gelf = Gelf::new(Default::default());
 
         let mut msg = gelf
-            .decode(&mut gzip(b"Hello!"))
+            .decode(gzip(b"Hello!"))
             .expect("failed to decode message")
             .expect("missing message value")
             .into_reader()
@@ -645,7 +637,7 @@ mod tests {
         let mut gelf = Gelf::new(Default::default());
 
         let mut msg = gelf
-            .decode(&mut zlib(b"Hello!"))
+            .decode(zlib(b"Hello!"))
             .expect("failed to decode message")
             .expect("missing message value")
             .into_reader()
@@ -663,7 +655,7 @@ mod tests {
         let mut gelf = Gelf::new(Default::default());
 
         let msg = gelf
-            .decode(&mut chunk(0, 0, 1, b"Hello!"))
+            .decode(chunk(0, 0, 1, b"Hello!"))
             .expect("failed to decode message")
             .expect("missing message value");
 
@@ -680,7 +672,7 @@ mod tests {
         let mut gelf = Gelf::new(Default::default());
 
         let msg = gelf
-            .decode(&mut chunk(0, 0, 1, b""))
+            .decode(chunk(0, 0, 1, b""))
             .expect("failed to decode message");
 
         assert!(msg.is_none());
@@ -691,19 +683,19 @@ mod tests {
         let mut gelf = Gelf::new(Default::default());
 
         let partial = gelf
-            .decode(&mut chunk(0, 0, 3, b"Hello"))
+            .decode(chunk(0, 0, 3, b"Hello"))
             .expect("failed to decode message");
 
         assert!(partial.is_none());
 
         let partial = gelf
-            .decode(&mut chunk(0, 2, 3, b"!"))
+            .decode(chunk(0, 2, 3, b"!"))
             .expect("failed to decode message");
 
         assert!(partial.is_none());
 
         let msg = gelf
-            .decode(&mut chunk(0, 1, 3, b" World"))
+            .decode(chunk(0, 1, 3, b" World"))
             .expect("failed to decode message")
             .expect("missing message value");
 
@@ -722,14 +714,14 @@ mod tests {
     fn read_message_chunked_uncompressed() {
         let mut gelf = Gelf::new(Default::default());
 
-        gelf.decode(&mut chunk(0, 0, 3, b"Hello"))
+        gelf.decode(chunk(0, 0, 3, b"Hello"))
             .expect("failed to decode message");
 
-        gelf.decode(&mut chunk(0, 2, 3, b"!"))
+        gelf.decode(chunk(0, 2, 3, b"!"))
             .expect("failed to decode message");
 
         let mut msg = gelf
-            .decode(&mut chunk(0, 1, 3, b" World"))
+            .decode(chunk(0, 1, 3, b" World"))
             .expect("failed to decode message")
             .expect("missing message value")
             .into_reader()
@@ -750,14 +742,14 @@ mod tests {
 
         let mut gelf = Gelf::new(Default::default());
 
-        gelf.decode(&mut chunk(0, 0, 3, chunk_1))
+        gelf.decode(chunk(0, 0, 3, chunk_1))
             .expect("failed to decode message");
 
-        gelf.decode(&mut chunk(0, 2, 3, chunk_3))
+        gelf.decode(chunk(0, 2, 3, chunk_3))
             .expect("failed to decode message");
 
         let mut msg = gelf
-            .decode(&mut chunk(0, 1, 3, chunk_2))
+            .decode(chunk(0, 1, 3, chunk_2))
             .expect("failed to decode message")
             .expect("missing message value")
             .into_reader()
@@ -778,14 +770,14 @@ mod tests {
 
         let mut gelf = Gelf::new(Default::default());
 
-        gelf.decode(&mut chunk(0, 0, 3, chunk_1))
+        gelf.decode(chunk(0, 0, 3, chunk_1))
             .expect("failed to decode message");
 
-        gelf.decode(&mut chunk(0, 2, 3, chunk_3))
+        gelf.decode(chunk(0, 2, 3, chunk_3))
             .expect("failed to decode message");
 
         let mut msg = gelf
-            .decode(&mut chunk(0, 1, 3, chunk_2))
+            .decode(chunk(0, 1, 3, chunk_2))
             .expect("failed to decode message")
             .expect("missing message value")
             .into_reader()
@@ -805,17 +797,17 @@ mod tests {
             ..Default::default()
         });
 
-        gelf.decode(&mut chunk(0, 0, 3, b"1"))
+        gelf.decode(chunk(0, 0, 3, b"1"))
             .expect("failed to decode message");
 
-        gelf.decode(&mut chunk(1, 0, 3, b"2"))
+        gelf.decode(chunk(1, 0, 3, b"2"))
             .expect("failed to decode message");
 
         assert_eq!(2, gelf.by_id.chunks.len());
 
         // Adding another chunk should tip over the capacity threshold
         // After this, there should only be the last message chunk added
-        gelf.decode(&mut chunk(2, 0, 3, b"2"))
+        gelf.decode(chunk(2, 0, 3, b"2"))
             .expect("failed to decode message");
 
         assert_eq!(1, gelf.by_arrival.chunks.len());
@@ -830,17 +822,17 @@ mod tests {
             ..Default::default()
         });
 
-        gelf.decode(&mut chunk(0, 0, 3, b"1"))
+        gelf.decode(chunk(0, 0, 3, b"1"))
             .expect("failed to decode message");
 
-        gelf.decode(&mut chunk(1, 0, 3, b"2"))
+        gelf.decode(chunk(1, 0, 3, b"2"))
             .expect("failed to decode message");
 
         thread::sleep(Duration::from_millis(5));
 
         // Adding another chunk should clean up the expired messages
         // After this, there should only be the last message chunk added
-        gelf.decode(&mut chunk(2, 0, 3, b"2"))
+        gelf.decode(chunk(2, 0, 3, b"2"))
             .expect("failed to decode message");
 
         assert_eq!(1, gelf.by_arrival.chunks.len());
@@ -857,7 +849,7 @@ mod tests {
 
         // The message says it has 3 chunks, but only 1
         // chunk is allowed
-        let r = gelf.decode(&mut chunk(0, 0, 3, b"1"));
+        let r = gelf.decode(chunk(0, 0, 3, b"1"));
 
         assert!(r.is_err());
     }
@@ -866,12 +858,12 @@ mod tests {
     fn adding_more_chunks_than_expected_to_chunked_message_fails() {
         let mut gelf = Gelf::new(Default::default());
 
-        gelf.decode(&mut chunk(0, 0, 3, b"1"))
+        gelf.decode(chunk(0, 0, 3, b"1"))
             .expect("failed to decode message");
 
         // The message says it has 3 chunks, but
         // the chunk says it is the 4th
-        let r = gelf.decode(&mut chunk(0, 3, 3, b"3"));
+        let r = gelf.decode(chunk(0, 3, 3, b"3"));
 
         assert!(r.is_err());
     }

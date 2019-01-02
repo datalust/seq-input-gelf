@@ -27,7 +27,10 @@ fn main() -> Result<(), Box<error::Error>> {
     eprintln!("{:#?}", config);
 
     // The receiver for GELF messages
-    let receive = receive::build(config.receive);
+    let receive = {
+        let mut receive = receive::build(config.receive);
+        move |src| receive.decode(src)
+    };
 
     // The processor for converting GELF into CLEF
     let process = {
