@@ -1,6 +1,6 @@
 # `sqelf`
 
-A server that accepts [Graylog extended format messages](http://docs.graylog.org/en/2.5/pages/gelf.html) via UDP and writes them as [compact log events](https://github.com/serilog/serilog-formatting-compact) to stdout.
+A server that accepts [Graylog extended format messages](http://docs.graylog.org/en/2.5/pages/gelf.html) via UDP and writes them to [Seq](https://datalust.co/seq).
 
 This repository contains an example `docker-compose` file that can be used to manage a local Seq container alongside `sqelf` in your development environment to collect log events from other containers:
 
@@ -18,3 +18,12 @@ $ docker run \
     --log-opt gelf-address=udp://localhost:12201 \
     my-app:latest
 ```
+
+## Configuration
+
+A `sqelf` container can be configured using the following environment variables:
+
+| Variable | Description | Default |
+| -------- | ----------- | ------- |
+| `SEQ_ADDRESS`| The address of the Seq server to forward events to | `http://localhost:5341` |
+| `SEQ_API_KEY` | The API key to use | - |
