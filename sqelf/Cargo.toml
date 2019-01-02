@@ -3,6 +3,7 @@ name = "sqelf"
 version = "0.0.0"
 authors = ["Datalust"]
 edition = "2018"
+license = "Apache-2.0"
 
 [dependencies.futures]
 version = "0.1"
