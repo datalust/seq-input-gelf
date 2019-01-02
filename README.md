@@ -18,3 +18,12 @@ $ docker run \
     --log-opt gelf-address=udp://localhost:12201 \
     my-app:latest
 ```
+
+## Configuration
+
+A `sqelf` container can be configured using the following environment variables:
+
+| Variable | Description | Default |
+| -------- | ----------- | ------- |
+| `SEQ_ADDRESS`| The address of the Seq server to forward events to | `http://localhost:5341` |
+| `SEQ_API_KEY` | The API key to use | - |

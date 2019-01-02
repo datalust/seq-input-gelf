@@ -6,5 +6,6 @@ COPY dockerfiles/run.sh /run.sh
 EXPOSE 12201
 
 ENV SEQ_ADDRESS=http://localhost:5341
+ENV SEQ_API_KEY=
 
 ENTRYPOINT ["/run.sh"]
