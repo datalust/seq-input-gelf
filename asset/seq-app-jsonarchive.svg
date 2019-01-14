@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   width="256"
+   height="256"
+   id="svg2"
+   version="1.1"
+   inkscape:version="0.92.1 r15371"
+   sodipodi:docname="seq-app-jsonarchive.svg">
+  <defs
+     id="defs4" />
+  <sodipodi:namedview
+     id="base"
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1.0"
+     inkscape:pageopacity="0.0"
+     inkscape:pageshadow="2"
+     inkscape:zoom="1.22"
+     inkscape:cx="588.74297"
+     inkscape:cy="84.219334"
+     inkscape:document-units="px"
+     inkscape:current-layer="layer1"
+     showgrid="false"
+     inkscape:window-width="2560"
+     inkscape:window-height="1361"
+     inkscape:window-x="-9"
+     inkscape:window-y="-9"
+     inkscape:window-maximized="1" />
+  <metadata
+     id="metadata7">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(0,-796.36218)">
+    <path
+       style="fill:#ebebeb;fill-opacity:0.99264712;stroke:none;stroke-width:8.37151146;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+       d="m 199.38525,820.43185 32,37.77869 -24.59016,-6.36377 z"
+       id="path4594"
+       inkscape:connector-curvature="0" />
+    <path
+       style="opacity:1;fill:#ebebeb;fill-opacity:0.97058835;stroke:#a9a9a9;stroke-width:8.16668606;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1"
+       d="M 29.468589,824.51519 H 197.32858 l 7.40366,29.92141 24.56967,6.06123 V 1059.1846 H 29.468589 Z"
+       id="rect4577"
+       inkscape:connector-curvature="0"
+       sodipodi:nodetypes="ccccccc" />
+    <text
+       xml:space="preserve"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:87.88056946px;line-height:1.25;font-family:Courier;-inkscape-font-specification:Courier;letter-spacing:0px;word-spacing:0px;fill:#1a1a1a;fill-opacity:1;stroke:none;stroke-width:1.02985036"
+       x="44.697197"
+       y="940.50702"
+       id="text4581"
+       transform="scale(0.97101482,1.0298504)"><tspan
+         sodipodi:role="line"
+         id="tspan4579"
+         x="44.697197"
+         y="940.50702"
+         style="stroke-width:1.02985036">{</tspan></text>
+    <g
+       id="g4588"
+       transform="translate(-430.32786,316.65574)"
+       style="fill:#1a1a1a">
+      <rect
+         y="605.98926"
+         x="517.82788"
+         height="43"
+         width="5"
+         id="rect4044"
+         style="fill:#1a1a1a;fill-opacity:0.94117647;stroke:none"
+         inkscape:export-filename="C:\Users\nblumhardt\Desktop\seq-32.png"
+         inkscape:export-xdpi="9.6000004"
+         inkscape:export-ydpi="9.6000004" />
+      <rect
+         style="fill:#1a1a1a;fill-opacity:1;stroke:none"
+         id="rect4046"
+         width="15"
+         height="43"
+         x="532.82788"
+         y="605.98926"
+         inkscape:export-filename="C:\Users\nblumhardt\Desktop\seq-32.png"
+         inkscape:export-xdpi="9.6000004"
+         inkscape:export-ydpi="9.6000004" />
+      <rect
+         y="605.98926"
+         x="552.82788"
+         height="43"
+         width="20"
+         id="rect4048"
+         style="fill:#1a1a1a;fill-opacity:1;stroke:none"
+         inkscape:export-filename="C:\Users\nblumhardt\Desktop\seq-32.png"
+         inkscape:export-xdpi="9.6000004"
+         inkscape:export-ydpi="9.6000004" />
+      <rect
+         style="fill:#1a1a1a;fill-opacity:0.94117647;stroke:none"
+         id="rect4050"
+         width="25"
+         height="43"
+         x="577.82788"
+         y="605.98926"
+         inkscape:export-filename="C:\Users\nblumhardt\Desktop\seq-32.png"
+         inkscape:export-xdpi="9.6000004"
+         inkscape:export-ydpi="9.6000004" />
+    </g>
+    <text
+       id="text4592"
+       y="940.50702"
+       x="-221.40236"
+       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:87.88056946px;line-height:1.25;font-family:Courier;-inkscape-font-specification:Courier;letter-spacing:0px;word-spacing:0px;fill:#1a1a1a;fill-opacity:1;stroke:none;stroke-width:1.02985036"
+       xml:space="preserve"
+       transform="scale(-0.97101482,1.0298504)"><tspan
+         y="940.50702"
+         x="-221.40236"
+         id="tspan4590"
+         sodipodi:role="line"
+         style="stroke-width:1.02985036">{</tspan></text>
+  </g>
+</svg>
