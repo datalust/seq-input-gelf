@@ -12,7 +12,7 @@ environment:
     secure: bn3qFcGsm8Qw1V7px12K5w==
 
 init:
-  - git config --global core.longpaths true
+- ps: ./ci/setup.ps1
 
 build_script:
 - ps: ./ci/build.ps1 -shortver "$($env:APPVEYOR_BUILD_VERSION)"
