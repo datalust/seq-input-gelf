@@ -23,3 +23,12 @@ build_script:
 
 artifacts:
 - path: publish\*
+
+deploy:
+- provider: NuGet
+  api_key:
+    secure: ksmDWNHXO2Sh0FDXjJ+vj2a6ICn1bc2XQuA3hQ1N26Sel6kOwP/W8Z9u0y6JNQbg
+  skip_symbols: true
+  artifact: /Seq.Input.Gelf.*\.nupkg/
+  on:
+    branch: /^(master|dev|release/.*)$/
