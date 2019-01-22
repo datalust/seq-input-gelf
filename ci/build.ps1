@@ -111,7 +111,7 @@ function Publish-Container($version)
     if ($LASTEXITCODE) { exit 1 }
 }
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 Push-Location "$PSScriptRoot/../"
 
 Initialize-Docker
