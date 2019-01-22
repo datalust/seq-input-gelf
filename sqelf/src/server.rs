@@ -13,6 +13,7 @@ use futures::{future::lazy, sync::mpsc};
 pub type Error = failure::Error;
 
 use crate::receive::Message;
+use crate::diagnostics::emit_err;
 
 /**
 Server configuration.
@@ -58,7 +59,7 @@ pub fn build(
         tokio::spawn(lazy(move || {
             rx.for_each(move |msg| {
                 handle(msg).or_else(|e: Error| {
-                    eprintln!("processing failed: {}", e);
+                    emit_err(&e, "GELF processing failed");
 
                     Ok(())
                 })
@@ -71,13 +72,13 @@ pub fn build(
                 let tx = tx.clone();
 
                 tx.send(msg).map(|_| ()).or_else(|e| {
-                    eprintln!("sending failed: {}", e);
+                    emit_err(&e, "GELF buffering failed");
 
                     Ok(())
                 })
             })
             .or_else(|e| {
-                eprintln!("receiving failed: {}", e);
+                emit_err(&e, "GELF receive failed");
 
                 Ok(())
             })

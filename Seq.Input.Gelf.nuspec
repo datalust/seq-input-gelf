@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+  <metadata>
+    <id>Seq.Input.Gelf</id>
+    <version>$version$</version>
+    <authors>Datalust and Contributors</authors>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>Receive GELF event payloads via UDP.</description>
+    <language>en-US</language>
+    <projectUrl>https://github.com/datalust/sqelf</projectUrl>
+    <licenseUrl>http://www.apache.org/licenses/LICENSE-2.0</licenseUrl>
+    <iconUrl>https://raw.githubusercontent.com/datalust/sqelf/master/asset/seq-input-gelf.png</iconUrl>
+    <tags>seq-app</tags>
+  </metadata>
+  <files>
+    <file src="seq-input-gelf.d.json" target="" />
+    <file src="target\x86_64-pc-windows-msvc\release\sqelf.exe" target="win-x64" />
+    <file src="target\x86_64-unknown-linux-gnu\release\sqelf" target="linux-x64\sqelf" />
+  </files>
+</package>

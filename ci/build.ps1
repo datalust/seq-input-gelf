@@ -16,7 +16,6 @@ function Write-BeginStep($invocation)
     Write-Output "###########################################################"
     Write-Output ""
 }
-
 function Initialize-Docker
 {
     Write-BeginStep $MYINVOCATION
@@ -29,10 +28,16 @@ function Initialize-Docker
     }
 }
 
-function Initialize-HostShare
+function Initialize-Filesystem
 {
     Write-BeginStep $MYINVOCATION
     
+    if (Test-Path .\publish) {
+        Remove-Item .\publish -Recurse
+    }
+
+    mkdir .\publish
+
     if ($IsCIBuild)
     {
         $hostShare = "X:\host"
@@ -47,7 +52,7 @@ function Initialize-HostShare
     }
 }
 
-function Invoke-NativeBuild
+function Invoke-LinuxBuild
 {
     Write-BeginStep $MYINVOCATION
 
@@ -65,7 +70,7 @@ function Invoke-NativeBuild
     }
 }
 
-function Build-Container
+function Invoke-DockerBuild
 {
     Write-BeginStep $MYINVOCATION
 
@@ -73,8 +78,31 @@ function Build-Container
     if ($LASTEXITCODE) { exit 1 }
 }
 
+function Invoke-WindowsBuild
+{
+    Write-BeginStep $MYINVOCATION
+
+    # Cargo writes to STDERR
+    $ErrorActionPreference = "SilentlyContinue"
+
+    cargo build --release --target=x86_64-pc-windows-msvc
+    if ($LASTEXITCODE) { exit 1 }
+
+    $ErrorActionPreference = "Stop"
+}
+
+function Invoke-NuGetPack($version)
+{
+    Write-BeginStep $MYINVOCATION
+
+    & .\tool\nuget.exe pack .\Seq.Input.Gelf.nuspec -version $version -outputdirectory .\publish
+    if ($LASTEXITCODE) { exit 1 }
+}
+
 function Publish-Container($version)
 {
+    Write-BeginStep $MYINVOCATION
+
     & docker tag sqelf-ci:latest datalust/sqelf-ci:$version
     if ($LASTEXITCODE) { exit 1 }
 
@@ -91,15 +119,15 @@ function Publish-Container($version)
 $ErrorActionPreference = "Stop"
 Push-Location "$PSScriptRoot/../"
 
-$version = "$shortver.0"
-
 Initialize-Docker
-Initialize-HostShare
-Invoke-NativeBuild
-Build-Container
+Initialize-Filesystem
+Invoke-LinuxBuild
+Invoke-DockerBuild
+Invoke-WindowsBuild
+Invoke-NuGetPack $shortver
 
 if ($IsPublishedBuild) {
-    Publish-Container $version
+    Publish-Container $shortver
 }
 else {
     Write-Output "Not publishing Docker container"
