@@ -82,7 +82,7 @@ function Invoke-WindowsBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    cargo build --release --target=x86_64-pc-windows-msvc
+    cargo build --release --target=x86_64-pc-windows-msvc --verbose
     if ($LASTEXITCODE) { exit 1 }
 }
 
