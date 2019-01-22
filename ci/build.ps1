@@ -82,8 +82,13 @@ function Invoke-WindowsBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    cargo build --release --target=x86_64-pc-windows-msvc  2>&1
+    # Cargo writes to STDERR
+    $ErrorActionPreference = "SilentlyContinue"
+
+    cargo build --release --target=x86_64-pc-windows-msvc
     if ($LASTEXITCODE) { exit 1 }
+
+    $ErrorActionPreference = "Stop"
 }
 
 function Invoke-NuGetPack($version)

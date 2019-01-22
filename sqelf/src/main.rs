@@ -5,6 +5,7 @@ pub mod io;
 pub mod process;
 pub mod receive;
 pub mod server;
+mod diagnostics;
 
 use std::error;
 
@@ -24,7 +25,6 @@ impl Config {
 
 fn main() -> Result<(), Box<error::Error>> {
     let config = Config::get();
-    eprintln!("{:#?}", config);
 
     // The receiver for GELF messages
     let receive = {
