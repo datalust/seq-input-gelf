@@ -82,7 +82,7 @@ function Invoke-WindowsBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    cargo build --release --target=x86_64-pc-windows-msvc --verbose
+    cargo build --release --target=x86_64-pc-windows-msvc  2>&1
     if ($LASTEXITCODE) { exit 1 }
 }
 
@@ -111,7 +111,7 @@ function Publish-Container($version)
     if ($LASTEXITCODE) { exit 1 }
 }
 
-$ErrorActionPreference = "Continue"
+$ErrorActionPreference = "Stop"
 Push-Location "$PSScriptRoot/../"
 
 Initialize-Docker
