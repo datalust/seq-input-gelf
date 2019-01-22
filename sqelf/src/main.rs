@@ -6,25 +6,14 @@ pub mod process;
 pub mod receive;
 pub mod server;
 
+mod config;
+
+pub use self::config::Config;
+
 use std::error;
 
-#[derive(Debug, Default, Clone)]
-pub struct Config {
-    pub receive: receive::Config,
-    pub process: process::Config,
-    pub server: server::Config,
-}
-
-impl Config {
-    fn get() -> Self {
-        // NOTE: We'll want to read config from the env
-        Config::default()
-    }
-}
-
 fn main() -> Result<(), Box<error::Error>> {
-    let config = Config::get();
-    eprintln!("{:#?}", config);
+    let config = Config::from_env()?;
 
     // The receiver for GELF messages
     let receive = {
