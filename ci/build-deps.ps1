@@ -1,6 +1,9 @@
 $IsCIBuild = $null -ne $env:APPVEYOR_BUILD_NUMBER
 $IsPublishedBuild = $env:APPVEYOR_REPO_BRANCH -eq "master" -and $null -eq $env:APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH
 
+$IsCIBuild = $null -ne $env:APPVEYOR_BUILD_NUMBER
+$IsPublishedBuild = $env:APPVEYOR_REPO_BRANCH -eq "master" -and $null -eq $env:APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH
+
 function Write-BeginStep($invocation)
 {
     Write-Output ""
@@ -12,22 +15,27 @@ function Write-BeginStep($invocation)
     Write-Output "###########################################################"
     Write-Output ""
 }
-
 function Initialize-Docker
 {
     Write-BeginStep $MYINVOCATION
-
+    
     if ($IsCIBuild) {
         Write-Output "Switching Docker to Linux containers..."
-
+        
         docker-switch-linux
         if ($LASTEXITCODE) { exit 1 }
     }
 }
 
-function Initialize-HostShare
+function Initialize-Filesystem
 {
     Write-BeginStep $MYINVOCATION
+    
+    if (Test-Path .\publish) {
+        Remove-Item .\publish -Recurse
+    }
+
+    mkdir .\publish
 
     if ($IsCIBuild)
     {
@@ -43,40 +51,57 @@ function Initialize-HostShare
     }
 }
 
-function Invoke-NativeBuild
+function Invoke-LinuxBuild
 {
     Write-BeginStep $MYINVOCATION
 
     if ($IsCIBuild) {
         $hostShare = "X:\host"
-        Push-Location "$hostShare/src"
+        pushd "$hostShare/src"
     }
 
     & "./ci/cross-build.ps1" 2>&1
-    if ($LASTEXITCODE) {
-        if ($IsCIBuild) {
-            Pop-Location
-        }
-
-        exit 1
-    }
-
+    if ($LASTEXITCODE) { exit 1 }
+    
     if ($IsCIBuild) {
-        Pop-Location
+        popd
         Copy-Item -Path "$hostShare/src/target" -Recurse -Destination . -Container
     }
 }
 
-function Build-Container
+function Invoke-DockerBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    & docker build --no-cache --file dockerfiles/Dockerfile -t sqelf-ci:latest .
+    & docker build --file dockerfiles/Dockerfile -t sqelf-ci:latest .
+    if ($LASTEXITCODE) { exit 1 }
+}
+
+function Invoke-WindowsBuild
+{
+    Write-BeginStep $MYINVOCATION
+
+    # Cargo writes to STDERR
+    $ErrorActionPreference = "SilentlyContinue"
+
+    cargo build --release --target=x86_64-pc-windows-msvc
+    if ($LASTEXITCODE) { exit 1 }
+
+    $ErrorActionPreference = "Stop"
+}
+
+function Invoke-NuGetPack($version)
+{
+    Write-BeginStep $MYINVOCATION
+
+    & .\tool\nuget.exe pack .\Seq.Input.Gelf.nuspec -version $version -outputdirectory .\publish
     if ($LASTEXITCODE) { exit 1 }
 }
 
 function Publish-Container($version)
 {
+    Write-BeginStep $MYINVOCATION
+
     & docker tag sqelf-ci:latest datalust/sqelf-ci:$version
     if ($LASTEXITCODE) { exit 1 }
 

@@ -7,15 +7,15 @@ Push-Location "$PSScriptRoot/../"
 
 . "./ci/build-deps.ps1"
 
-$version = "$shortver.0"
-
 Initialize-Docker
-Initialize-HostShare
-Invoke-NativeBuild
-Build-Container
+Initialize-Filesystem
+Invoke-LinuxBuild
+Invoke-DockerBuild
+Invoke-WindowsBuild
+Invoke-NuGetPack $shortver
 
 if ($IsPublishedBuild) {
-    Publish-Container $version
+    Publish-Container $shortver
 }
 else {
     Write-Output "Not publishing Docker container"

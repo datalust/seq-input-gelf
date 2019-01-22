@@ -1,0 +1,22 @@
+{
+    "$schema": "https://getseq.net/schema/app-definition/v3",
+    "name": "GELF Input",
+    "description": "Accept Graylog Extended Log Format (GELF) payloads over UDP. Requires Seq 5.1+ for optimal performance.",
+    "capabilities": ["input"],
+    "platform": {
+      "win-x64": {
+        "executable": "win-x64\\sqelf.exe"
+      },
+      "linux-x64": {
+        "executable": "linux-x64/sqelf"
+      }
+    },
+    "settings": {
+      "gelfAddress": {
+        "displayName": "GELF address",
+        "helpText": "The socket address (IP address and port) on which the input will listen for UDP GELF payloads. The default is `0.0.0.0:12201`.",
+        "isOptional": true
+      }
+    }
+  }
+  

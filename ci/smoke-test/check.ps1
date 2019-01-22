@@ -84,8 +84,8 @@ function Check-ClefOutput {
     Invoke-RestMethod -Uri http://localhost:5342/api/events?clef
 }
 
-Invoke-NativeBuild
-Build-Container
+Invoke-LinuxBuild
+Invoke-DockerBuild
 Build-TestAppContainer
 Start-SeqEnvironment
 Invoke-TestApp

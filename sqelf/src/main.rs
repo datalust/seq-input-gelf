@@ -5,6 +5,7 @@ pub mod io;
 pub mod process;
 pub mod receive;
 pub mod server;
+mod diagnostics;
 
 mod config;
 
