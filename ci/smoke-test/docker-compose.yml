@@ -1,18 +1,18 @@
 version: '3'
 services:
   sqelf:
-    image: datalust/sqelf:latest
+    image: sqelf-ci:latest
     depends_on:
       - seq
     ports:
-      - "12201:12201/udp"
+      - "12202:12201/udp"
     environment:
       SEQ_ADDRESS: "http://seq:5341"
     restart: unless-stopped
   seq:
     image: datalust/seq:latest
     ports:
-      - "5341:80"
+      - "5342:80"
     environment:
       ACCEPT_EULA: Y
     restart: unless-stopped

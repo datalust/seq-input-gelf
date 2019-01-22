@@ -10,7 +10,7 @@ Push-Location ci
 if ($LASTEXITCODE) { exit 1 }
 Pop-Location
 
-& docker run -it `
+& docker run --rm -it `
     -e SQELF_TEST=$SQELF_TEST `
     -e SQELF_NATIVE_TEST=$SQELF_NATIVE_TEST `
     -v ${pwd}:/sqelf `

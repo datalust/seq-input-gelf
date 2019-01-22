@@ -33,10 +33,36 @@ A `sqelf` container can be configured using the following environment variables:
 | -------- | ----------- | ------- |
 | `SEQ_ADDRESS`| The address of the Seq server to forward events to | `http://localhost:5341` |
 | `SEQ_API_KEY` | The API key to use | - |
+| `GELF_ADDRESS` | The address to bind the UDP GELF server to | `0.0.0.0:12201`
 
 ### Quick local setup with `docker-compose`
 
-This repository contains an example `docker-compose` file that can be used to manage a local Seq container alongside `sqelf` in your development environment to collect log events from other containers:
+The following is an example `docker-compose` file that can be used to manage a local Seq container alongside `sqelf` in your development environment to collect log events from other containers:
+
+```yaml
+version: '3'
+services:
+  sqelf:
+    image: datalust/sqelf:latest
+    depends_on:
+      - seq
+    ports:
+      - "12201:12201/udp"
+    environment:
+      SEQ_ADDRESS: "http://seq:5341"
+    restart: unless-stopped
+  seq:
+    image: datalust/seq:latest
+    ports:
+      - "5341:80"
+    environment:
+      ACCEPT_EULA: Y
+    restart: unless-stopped
+    volumes:
+      - ./seq-data:/data
+```
+
+The service can be started using `docker-compose up`:
 
 ```shell
 $ docker-compose -p seq up -d
