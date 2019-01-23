@@ -112,15 +112,15 @@ where
         // Set the log level; these are the standard Syslog levels
         if clef.level.is_none() {
             clef.level = Some(match level.unwrap_or(6) {
-                0 => Str::Borrowed("Emergency"),
-                1 => Str::Borrowed("Alert"),
-                2 => Str::Borrowed("Critical"),
-                3 => Str::Borrowed("Error"),
-                4 => Str::Borrowed("Warning"),
-                5 => Str::Borrowed("Notice"),
-                6 => Str::Borrowed("Informational"),
-                7 => Str::Borrowed("Debug"),
-                _ => Str::Borrowed("Debug"),
+                0 => Str::Borrowed("emerg"),
+                1 => Str::Borrowed("alert"),
+                2 => Str::Borrowed("crit"),
+                3 => Str::Borrowed("err"),
+                4 => Str::Borrowed("warning"),
+                5 => Str::Borrowed("notice"),
+                6 => Str::Borrowed("info"),
+                7 => Str::Borrowed("debug"),
+                _ => Str::Borrowed("debug"),
             })
         }
 
@@ -211,7 +211,7 @@ mod tests {
 
                 let expected = json!({
                     "@t": "2013-11-21T17:11:02.307000000Z",
-                    "@l": "Alert",
+                    "@l": "alert",
                     "@m": "A short message that helps you identify what is going on",
                     "@x": "Backtrace here",
                     "some_env_var": "bar",
@@ -232,7 +232,7 @@ mod tests {
     #[test]
     fn from_gelf_inner_json() {
         let clef = json!({
-            "@l": "Information",
+            "@l": "info",
             "@mt": "A short message that helps {user_id} identify what is going on",
             "@t": "2013-11-21T17:11:02Z",
             "@x": "Backtrace here",
@@ -260,7 +260,7 @@ mod tests {
         process
             .with_clef(gelf.to_string().as_bytes(), |clef| {
                 let expected = json!({
-                    "@l": "Information",
+                    "@l": "info",
                     "@mt": "A short message that helps {user_id} identify what is going on",
                     "@t": "2013-11-21T17:11:02Z",
                     "@x": "Backtrace here",
