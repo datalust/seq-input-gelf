@@ -7,6 +7,7 @@ use serde_json::Value;
 use self::str::{CachedString, Inlinable, Str};
 
 use crate::io::MemRead;
+use std::collections::HashMap;
 
 pub type Error = failure::Error;
 
@@ -140,33 +141,32 @@ where
         // because we trust the configuration of the logger ahead of any one event.
         if let Some(additional) = self.additional() {
             for (k, v) in additional {
-                if let Some(old) = clef.additional.insert(k.to_owned(), v.clone()) {
-                    clef.additional.insert(format!("__{}", k), old);
-                }
+                Self::override_value(&mut clef.additional, k.to_owned(), v.clone());
             }
         }
 
         // Set GELF built-in properties; we also trust these ahead of any one event's properties.
-        if let Some(old) = clef.additional.insert("host".to_owned(), host.as_ref().to_string().into()) {
-            clef.additional.insert("__host".to_owned(), old);
-        }
+        Self::override_value(&mut clef.additional, "host", host.as_ref().to_string().into());
+
         if let Some(facility) = facility {
-            if let Some(old) = clef.additional.insert("facility".to_owned(), facility.as_ref().to_string().into()) {
-                clef.additional.insert("__facility".to_owned(), old);
-            }
+            Self::override_value(&mut clef.additional, "facility", facility.as_ref().to_string().into());
         }
+
         if let Some(file) = file {
-            if let Some(old) = clef.additional.insert("file".to_owned(), file.as_ref().to_string().into()) {
-                clef.additional.insert("__file".to_owned(), old);
-            }
+            Self::override_value(&mut clef.additional, "file", file.as_ref().to_string().into());
         }
+
         if let Some(line) = line {
-            if let Some(old) = clef.additional.insert("line".to_owned(), (*line).into()) {
-                clef.additional.insert("__line".to_owned(), old);
-            }
+            Self::override_value(&mut clef.additional, "line", (*line).into());
         }
 
         clef
+    }
+
+    fn override_value(fields: &mut HashMap<String, Value>, name: impl ToString, value: Value) {
+        if let Some(old) = fields.insert(name.to_string(), value) {
+            fields.insert(format!("__{}", name.to_string()), old);
+        }
     }
 
     fn additional(&self) -> Option<impl IntoIterator<Item = (&str, &Value)>> {
