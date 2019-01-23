@@ -118,11 +118,6 @@ function Publish-Container($version)
 function Start-SeqEnvironment {
     Write-BeginStep $MYINVOCATION
 
-    if ($IsCIBuild) {
-        $hostShare = "X:\host"
-        Push-Location "$hostShare/src"
-    }
-
     Push-Location ci/smoke-test
 
     $ErrorActionPreference = "SilentlyContinue"
@@ -163,10 +158,6 @@ function Start-SeqEnvironment {
 
     # Give Seq enough time to start up
     Start-Sleep -Seconds 5
-
-    if ($IsCIBuild) {
-        Pop-Location
-    }
 
     $ErrorActionPreference = "Stop"
 
