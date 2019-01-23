@@ -20,6 +20,14 @@ else {
     Write-Output "Not running Windows build"
 }
 
+Build-TestAppContainer
+Start-SeqEnvironment
+Invoke-TestApp
+Check-SqelfLogs
+Check-SeqLogs
+Check-ClefOutput
+Stop-SeqEnvironment
+
 if ($IsPublishedBuild) {
     Publish-Container $shortver
 }
