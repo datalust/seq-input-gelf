@@ -1,13 +1,6 @@
-use std::{
-    env,
-    str::FromStr,
-};
+use std::{env, str::FromStr};
 
-use crate::{
-    receive,
-    process,
-    server,
-};
+use crate::{process, receive, server};
 
 pub type Error = failure::Error;
 

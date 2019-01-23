@@ -75,22 +75,22 @@ where
     TMessage: AsRef<str>,
 {
     /**
-     Covert a GELF message into CLEF.
+    Covert a GELF message into CLEF.
 
-     The contents of the GELF message is inspected and deserialized as CLEF-encoded
-     JSON if possible. In this case, timestamp, message, and level information from
-     the embedded CLEF is given precedence over the outer GELF envelope.
+    The contents of the GELF message is inspected and deserialized as CLEF-encoded
+    JSON if possible. In this case, timestamp, message, and level information from
+    the embedded CLEF is given precedence over the outer GELF envelope.
 
-     Other fields with conflicting names are prioritized:
+    Other fields with conflicting names are prioritized:
 
-       GELF envelope > GELF payload > Embedded CLEF/JSON
+      GELF envelope > GELF payload > Embedded CLEF/JSON
 
-     This means fields set by the system/on the logger are preferred over
-     the fields attached to any one event.
+    This means fields set by the system/on the logger are preferred over
+    the fields attached to any one event.
 
-     If fields conflict, then the lower-priority field is included with a
-     double-underscore-prefixed name, e.g.: "__host".
-     */
+    If fields conflict, then the lower-priority field is included with a
+    double-underscore-prefixed name, e.g.: "__host".
+    */
     fn to_clef(&self) -> clef::Message {
         #![deny(unused_variables)]
 
@@ -146,14 +146,26 @@ where
         }
 
         // Set GELF built-in properties; we also trust these ahead of any one event's properties.
-        Self::override_value(&mut clef.additional, "host", host.as_ref().to_string().into());
+        Self::override_value(
+            &mut clef.additional,
+            "host",
+            host.as_ref().to_string().into(),
+        );
 
         if let Some(facility) = facility {
-            Self::override_value(&mut clef.additional, "facility", facility.as_ref().to_string().into());
+            Self::override_value(
+                &mut clef.additional,
+                "facility",
+                facility.as_ref().to_string().into(),
+            );
         }
 
         if let Some(file) = file {
-            Self::override_value(&mut clef.additional, "file", file.as_ref().to_string().into());
+            Self::override_value(
+                &mut clef.additional,
+                "file",
+                file.as_ref().to_string().into(),
+            );
         }
 
         if let Some(line) = line {

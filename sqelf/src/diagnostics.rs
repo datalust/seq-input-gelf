@@ -3,21 +3,25 @@ use std::fmt::Display;
 
 #[derive(Serialize)]
 struct DiagnosticEvent<'a> {
-    #[serde(rename="@t")]
+    #[serde(rename = "@t")]
     timestamp: DateTime<Utc>,
 
-    #[serde(rename="@l")]
+    #[serde(rename = "@l")]
     level: &'static str,
 
-    #[serde(rename="@mt")]
+    #[serde(rename = "@mt")]
     message_template: &'static str,
 
-    #[serde(rename="@x")]
+    #[serde(rename = "@x")]
     error: Option<&'a str>,
 }
 
 impl<'a> DiagnosticEvent<'a> {
-    pub fn new(level: &'static str, error: Option<&'a str>, message_template: &'static str) -> DiagnosticEvent<'a> {
+    pub fn new(
+        level: &'static str,
+        error: Option<&'a str>,
+        message_template: &'static str,
+    ) -> DiagnosticEvent<'a> {
         DiagnosticEvent {
             timestamp: Utc::now(),
             message_template,

@@ -12,8 +12,8 @@ use futures::{future::lazy, sync::mpsc};
 
 pub type Error = failure::Error;
 
-use crate::receive::Message;
 use crate::diagnostics::emit_err;
+use crate::receive::Message;
 
 /**
 Server configuration.
