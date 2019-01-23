@@ -138,6 +138,7 @@ function Start-SeqEnvironment {
         exit 1
     }
 
+    & docker pull datalust/seq:latest
     & docker run --name sqelf-test-seq `
         --network sqelf-test `
         -e ACCEPT_EULA=Y `
