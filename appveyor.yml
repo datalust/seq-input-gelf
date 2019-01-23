@@ -20,6 +20,7 @@ install:
 
 build_script:
 - ps: ./ci/build.ps1 -shortver "$($env:APPVEYOR_BUILD_VERSION)"
+- ps: ./ci/smoke-test/check.ps1
 
 artifacts:
 - path: publish\*

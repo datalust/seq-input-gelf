@@ -103,7 +103,7 @@ impl<F> Decoder for Decode<F>
 where
     F: FnMut(Bytes) -> Result<Option<Message>, Error>,
 {
-    type Item = Gelf;
+    type Item = Message;
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
