@@ -11,8 +11,22 @@ Initialize-Docker
 Initialize-Filesystem
 Invoke-LinuxBuild
 Invoke-DockerBuild
-Invoke-WindowsBuild
-Invoke-NuGetPack $shortver
+
+if ($IsWindows) {
+    Invoke-WindowsBuild
+    Invoke-NuGetPack $shortver
+}
+else {
+    Write-Output "Not running Windows build"
+}
+
+Build-TestAppContainer
+Start-SeqEnvironment
+Invoke-TestApp
+Check-SqelfLogs
+Check-SeqLogs
+Check-ClefOutput
+Stop-SeqEnvironment
 
 if ($IsPublishedBuild) {
     Publish-Container $shortver

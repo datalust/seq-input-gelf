@@ -11,6 +11,9 @@ version = "0.1"
 [dependencies.tokio]
 version = "0.1"
 
+[dependencies.tokio-signal]
+version = "0.2"
+
 [dependencies.bytes]
 version = "0.4"
 

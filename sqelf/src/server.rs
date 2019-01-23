@@ -12,8 +12,8 @@ use futures::{future::lazy, sync::mpsc};
 
 pub type Error = failure::Error;
 
+use crate::diagnostics::*;
 use crate::receive::Message;
-use crate::diagnostics::emit_err;
 
 /**
 Server configuration.
@@ -54,33 +54,45 @@ pub fn build(
 
     let (tx, rx) = mpsc::channel(config.unprocessed_capacity);
 
-    Ok(lazy(move || {
+    let shutdown = tokio_signal::ctrl_c().map_err(emit_abort("Server setup failed"));
+
+    Ok(shutdown.and_then(move |shutdown| {
         // Spawn a background task to process events
         tokio::spawn(lazy(move || {
-            rx.for_each(move |msg| {
-                handle(msg).or_else(|e: Error| {
-                    emit_err(&e, "GELF processing failed");
-
-                    Ok(())
-                })
-            })
+            rx.for_each(move |msg| handle(msg).or_else(emit_continue("GELF processing failed")))
         }));
 
+        // Listen for Ctrl + C and other termination signals
+        // from the OS
+        let shutdown = shutdown
+            .map(|_| Op::Shutdown)
+            .map_err(emit_abort("Server shutdown was unclean"));
+
         // Accept and process incoming GELF messages over UDP
-        UdpFramed::new(sock, Decode(receive))
-            .for_each(move |(msg, _)| {
-                let tx = tx.clone();
+        // This stream should never return an `Err` variant
+        let server = UdpFramed::new(sock, Decode(receive))
+            .map(|(msg, _)| Op::Receive(Some(msg)))
+            .or_else(emit_continue_with("GELF receive failed", receive_empty));
 
-                tx.send(msg).map(|_| ()).or_else(|e| {
-                    emit_err(&e, "GELF buffering failed");
+        server
+            .select(shutdown)
+            .and_then(|msg| match msg {
+                // Continue processing received messages
+                Op::Receive(msg) => Ok(msg),
+                // Terminate on shutdown messages
+                // The error here causes the future to return
+                Op::Shutdown => {
+                    emit("Termination signal received; shutting down");
 
-                    Ok(())
-                })
+                    Err(())
+                }
             })
-            .or_else(|e| {
-                emit_err(&e, "GELF receive failed");
-
-                Ok(())
+            .filter_map(|msg| msg)
+            .for_each(move |msg| {
+                let tx = tx.clone();
+                tx.send(msg)
+                    .map(|_| ())
+                    .or_else(emit_continue("GELF buffering failed"))
             })
     }))
 }
@@ -99,4 +111,14 @@ where
 
         (self.0)(src)
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Op {
+    Receive(Option<Message>),
+    Shutdown,
+}
+
+fn receive_empty() -> Op {
+    Op::Receive(None)
 }
