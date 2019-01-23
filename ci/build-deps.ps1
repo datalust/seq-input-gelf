@@ -57,14 +57,14 @@ function Invoke-LinuxBuild
 
     if ($IsCIBuild) {
         $hostShare = "X:\host"
-        pushd "$hostShare/src"
+        Push-Location "$hostShare/src"
     }
 
     & "./ci/cross-build.ps1" 2>&1
     if ($LASTEXITCODE) { exit 1 }
     
     if ($IsCIBuild) {
-        popd
+        Pop-Location
         Copy-Item -Path "$hostShare/src/target" -Recurse -Destination . -Container
     }
 }
@@ -118,18 +118,21 @@ function Publish-Container($version)
 function Start-SeqEnvironment {
     Write-BeginStep $MYINVOCATION
 
+    if ($IsCIBuild) {
+        $hostShare = "X:\host"
+        Push-Location "$hostShare/src"
+    }
+
     Push-Location ci/smoke-test
+
+    $ErrorActionPreference = "SilentlyContinue"
 
     & docker rm -f sqelf-test-seq | Out-Null
     & docker rm -f sqelf-test-sqelf | Out-Null
 
     & docker network rm sqelf-test | Out-Null
 
-    if (Test-Path seq-data) {
-        Remove-Item -Force -Recurse seq-data
-    }
-
-    $data = "$(pwd)/seq-data"
+    $ErrorActionPreference = "Stop"
 
     & docker network create sqelf-test
     if ($LASTEXITCODE) {
@@ -141,7 +144,6 @@ function Start-SeqEnvironment {
         --network sqelf-test `
         -e ACCEPT_EULA=Y `
         -itd `
-        -v "${data}:/data" `
         -p 5342:80 `
         datalust/seq:latest
     if ($LASTEXITCODE) {
@@ -162,6 +164,10 @@ function Start-SeqEnvironment {
 
     # Give Seq enough time to start up
     Start-Sleep -Seconds 5
+
+    if ($IsCIBuild) {
+        Pop-Location
+    }
 
     Pop-Location
 }
@@ -188,8 +194,6 @@ function Stop-SeqEnvironment {
         Pop-Location
         exit 1
     }
-
-    Remove-Item -Force -Recurse seq-data
 
     Pop-Location
 }
