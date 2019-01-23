@@ -132,8 +132,6 @@ function Start-SeqEnvironment {
 
     & docker network rm sqelf-test | Out-Null
 
-    $ErrorActionPreference = "Stop"
-
     & docker network create sqelf-test
     if ($LASTEXITCODE) {
         Pop-Location
@@ -168,6 +166,8 @@ function Start-SeqEnvironment {
     if ($IsCIBuild) {
         Pop-Location
     }
+
+    $ErrorActionPreference = "Stop"
 
     Pop-Location
 }
