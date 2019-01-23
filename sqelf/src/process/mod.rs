@@ -73,6 +73,23 @@ where
     TString: AsRef<str>,
     TMessage: AsRef<str>,
 {
+    /**
+     Covert a GELF message into CLEF.
+
+     The contents of the GELF message is inspected and deserialized as CLEF-encoded
+     JSON if possible. In this case, timestamp, message, and level information from
+     the embedded CLEF is given precedence over the outer GELF envelope.
+
+     Other fields with conflicting names are prioritized:
+
+       GELF envelope > GELF payload > Embedded CLEF/JSON
+
+     This means fields set by the system/on the logger are preferred over
+     the fields attached to any one event.
+
+     If fields conflict, then the lower-priority field is included with a
+     double-underscore-prefixed name, e.g.: "__host".
+     */
     fn to_clef(&self) -> clef::Message {
         #![deny(unused_variables)]
 
@@ -84,25 +101,25 @@ where
             ref short_message,
             ref full_message,
             ref timestamp,
-            ref container_id,
-            ref command,
-            ref container_name,
-            ref created,
-            ref image_name,
-            ref image_id,
-            ref tag,
+            ref facility,
+            ref file,
+            ref line,
         } = self;
 
         let mut clef = clef::Message::maybe_from_json(short_message.as_ref())
             .unwrap_or_else(|| clef::Message::from_message(short_message.as_ref()));
 
-        // Set the log level
+        // Set the log level; these are the standard Syslog levels
         if clef.level.is_none() {
             clef.level = Some(match level.unwrap_or(6) {
-                l if l < 3 => Str::Borrowed("Fatal"),
+                0 => Str::Borrowed("Emergency"),
+                1 => Str::Borrowed("Alert"),
+                2 => Str::Borrowed("Critical"),
                 3 => Str::Borrowed("Error"),
                 4 => Str::Borrowed("Warning"),
-                l if l < 7 => Str::Borrowed("Info"),
+                5 => Str::Borrowed("Notice"),
+                6 => Str::Borrowed("Informational"),
+                7 => Str::Borrowed("Debug"),
                 _ => Str::Borrowed("Debug"),
             })
         }
@@ -114,46 +131,38 @@ where
                 .or_else(|| Some(clef::Timestamp::now()));
         }
 
-        // Set GELF properties
-        clef.gelf.host = Some(Str::Borrowed(host.as_ref()));
-        clef.gelf.full_message = full_message.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
+        // Set the exception, giving priority to the embedded CLEF exception.
+        if clef.exception.is_none() {
+            clef.exception = full_message.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
+        }
 
-        // Set the container environment
-        clef.docker.container_id = container_id.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-        clef.docker.command = command.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-        clef.docker.container_name = container_name
-            .as_ref()
-            .map(AsRef::as_ref)
-            .map(Str::Borrowed);
-        clef.docker.created = created.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-        clef.docker.image_name = image_name.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-        clef.docker.image_id = image_id.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-        clef.docker.tag = tag.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
-
-        // Set any additional properties
+        // Set additional properties first; these override any in an embedded CLEF payload,
+        // because we trust the configuration of the logger ahead of any one event.
         if let Some(additional) = self.additional() {
-            match &mut clef.additional {
-                // If the clef message already has properties,
-                // merge in the GELF ones (retaining clef)
-                Some(Value::Object(ref mut clef)) => {
-                    for (k, v) in additional {
-                        if !clef.contains_key(k) {
-                            clef.insert(k.to_owned(), v.clone());
-                        }
-                    }
+            for (k, v) in additional {
+                if let Some(old) = clef.additional.insert(k.to_owned(), v.clone()) {
+                    clef.additional.insert(format!("__{}", k), old);
                 }
-                // If the clef message has no properties,
-                // replace them with gelf
-                _ => {
-                    clef.additional = {
-                        let additional = additional
-                            .into_iter()
-                            .map(|(k, v)| (k.to_owned(), v.to_owned()))
-                            .collect();
+            }
+        }
 
-                        Some(Value::Object(additional))
-                    }
-                }
+        // Set GELF built-in properties; we also trust these ahead of any one event's properties.
+        if let Some(old) = clef.additional.insert("host".to_owned(), host.as_ref().to_string().into()) {
+            clef.additional.insert("__host".to_owned(), old);
+        }
+        if let Some(facility) = facility {
+            if let Some(old) = clef.additional.insert("facility".to_owned(), facility.as_ref().to_string().into()) {
+                clef.additional.insert("__facility".to_owned(), old);
+            }
+        }
+        if let Some(file) = file {
+            if let Some(old) = clef.additional.insert("file".to_owned(), file.as_ref().to_string().into()) {
+                clef.additional.insert("__file".to_owned(), old);
+            }
+        }
+        if let Some(line) = line {
+            if let Some(old) = clef.additional.insert("line".to_owned(), (*line).into()) {
+                clef.additional.insert("__line".to_owned(), old);
             }
         }
 
@@ -201,16 +210,14 @@ mod tests {
                 }
 
                 let expected = json!({
-                    "@l": "Fatal",
-                    "@m": "A short message that helps you identify what is going on",
                     "@t": "2013-11-21T17:11:02.307000000Z",
+                    "@l": "Alert",
+                    "@m": "A short message that helps you identify what is going on",
+                    "@x": "Backtrace here",
                     "some_env_var": "bar",
                     "some_info": "foo",
                     "user_id": 9001,
-                    "gelf": {
-                        "host": "example.org",
-                        "full_message": "Backtrace here"
-                    }
+                    "host": "example.org",
                 });
 
                 let clef = serde_json::to_value(&clef).expect("failed to read clef");
@@ -225,9 +232,10 @@ mod tests {
     #[test]
     fn from_gelf_inner_json() {
         let clef = json!({
-            "@l": "Info",
-            "@m": "A short message that helps you identify what is going on",
+            "@l": "Information",
+            "@mt": "A short message that helps {user_id} identify what is going on",
             "@t": "2013-11-21T17:11:02Z",
+            "@x": "Backtrace here",
             "user_id": 4000
         });
 
@@ -235,7 +243,6 @@ mod tests {
             "version": "1.1",
             "host": "example.org",
             "short_message": clef.to_string(),
-            "full_message": "Backtrace here",
             "level": 1,
             "_user_id": 9001,
             "_some_info": "foo",
@@ -253,24 +260,21 @@ mod tests {
         process
             .with_clef(gelf.to_string().as_bytes(), |clef| {
                 let expected = json!({
-                    "@l": "Info",
-                    "@m": "A short message that helps you identify what is going on",
+                    "@l": "Information",
+                    "@mt": "A short message that helps {user_id} identify what is going on",
                     "@t": "2013-11-21T17:11:02Z",
+                    "@x": "Backtrace here",
                     "some_env_var": "bar",
                     "some_info": "foo",
-                    "user_id": 4000,
-                    "docker": {
-                        "container_id": "abcdefghijklmnopqrstuv",
-                        "command": "run",
-                        "container_name": "test-container",
-                        "image_name": "test/image",
-                        "image_id": "abcdefghijklmnopqrstuv",
-                        "tag": "latest"
-                    },
-                    "gelf": {
-                        "host": "example.org",
-                        "full_message": "Backtrace here"
-                    }
+                    "user_id": 9001,
+                    "__user_id": 4000,
+                    "container_id": "abcdefghijklmnopqrstuv",
+                    "command": "run",
+                    "container_name": "test-container",
+                    "image_name": "test/image",
+                    "image_id": "abcdefghijklmnopqrstuv",
+                    "tag": "latest",
+                    "host": "example.org"
                 });
 
                 let clef = serde_json::to_value(&clef).expect("failed to read clef");
