@@ -11,8 +11,14 @@ Initialize-Docker
 Initialize-Filesystem
 Invoke-LinuxBuild
 Invoke-DockerBuild
-Invoke-WindowsBuild
-Invoke-NuGetPack $shortver
+
+if ($IsWindows) {
+    Invoke-WindowsBuild
+    Invoke-NuGetPack $shortver
+}
+else {
+    Write-Output "Not running Windows build"
+}
 
 if ($IsPublishedBuild) {
     Publish-Container $shortver

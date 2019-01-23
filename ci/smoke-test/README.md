@@ -1,4 +1,4 @@
-A smoke-test for the `sqelf` Docker container using the sample `docker-compose` file.
+A smoke-test for the `sqelf` Docker container.
 
 The script expects the following host ports to be available to bind:
 

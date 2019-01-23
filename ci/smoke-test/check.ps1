@@ -8,23 +8,41 @@ function Start-SeqEnvironment {
 
     Push-Location ci/smoke-test
 
-    & docker-compose -p sqelf-test down
-    if ($LASTEXITCODE) {
-        Pop-Location
-        exit 1
-    }
+    & docker rm -f sqelf-test-seq | Out-Null
+    & docker rm -f sqelf-test-sqelf | Out-Null
 
-    & docker-compose -p sqelf-test rm -f
-    if ($LASTEXITCODE) {
-        Pop-Location
-        exit 1
-    }
+    & docker network rm sqelf-test | Out-Null
 
     if (Test-Path seq-data) {
         Remove-Item -Force -Recurse seq-data
     }
 
-    & docker-compose -p sqelf-test up -d
+    $data = "$(pwd)/seq-data"
+
+    & docker network create sqelf-test
+    if ($LASTEXITCODE) {
+        Pop-Location
+        exit 1
+    }
+
+    & docker run --name sqelf-test-seq `
+        --network sqelf-test `
+        -e ACCEPT_EULA=Y `
+        -itd `
+        -v "${data}:/data" `
+        -p 5342:80 `
+        datalust/seq:latest
+    if ($LASTEXITCODE) {
+        Pop-Location
+        exit 1
+    }
+
+    & docker run --name sqelf-test-sqelf `
+        --network sqelf-test `
+        -e SEQ_ADDRESS=http://sqelf-test-seq:5341 `
+        -itd `
+        -p 12202:12201/udp `
+        sqelf-ci:latest
     if ($LASTEXITCODE) {
         Pop-Location
         exit 1
@@ -41,17 +59,25 @@ function Stop-SeqEnvironment {
 
     Push-Location ci/smoke-test
 
-    & docker-compose -p sqelf-test down
+    & docker rm -f sqelf-test-seq
     if ($LASTEXITCODE) {
         Pop-Location
         exit 1
     }
 
-    & docker-compose -p sqelf-test rm -f
+    & docker rm -f sqelf-test-sqelf
     if ($LASTEXITCODE) {
         Pop-Location
         exit 1
     }
+
+    & docker network rm sqelf-test
+    if ($LASTEXITCODE) {
+        Pop-Location
+        exit 1
+    }
+
+    Remove-Item -Force -Recurse seq-data
 
     Pop-Location
 }
@@ -81,14 +107,32 @@ function Invoke-TestApp {
 function Check-ClefOutput {
     Write-BeginStep $MYINVOCATION
 
-    Invoke-RestMethod -Uri http://localhost:5342/api/events?clef
+    $json = Invoke-RestMethod -Uri http://localhost:5342/api/events?clef
+
+    if (-Not $json) {
+        throw [System.Exception] "CLEF output is empty"
+    } else {
+        $json
+    }
 }
 
-Invoke-LinuxBuild
-Invoke-DockerBuild
-Build-TestAppContainer
+function Check-SqelfLogs {
+    Write-BeginStep $MYINVOCATION
+
+    & docker logs sqelf-test-sqelf
+}
+
+function Check-SeqLogs {
+    Write-BeginStep $MYINVOCATION
+
+    & docker logs sqelf-test-seq
+}
+
+# Build-TestAppContainer
 Start-SeqEnvironment
 Invoke-TestApp
+Check-SqelfLogs
+Check-SeqLogs
 Check-ClefOutput
 Stop-SeqEnvironment
 
