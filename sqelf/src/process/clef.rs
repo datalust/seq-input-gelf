@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fmt,
     time::{Duration, SystemTime},
 };
@@ -14,112 +15,34 @@ use super::str::Str;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(super) struct Message<'a> {
-    // Clef built-ins
-    #[serde(rename = "@m")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(borrow)]
-    pub(super) message: Option<Str<'a>>,
-    #[serde(rename = "@mt")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(borrow)]
-    pub(super) template: Option<Str<'a>>,
     #[serde(rename = "@t")]
     pub(super) timestamp: Option<Timestamp>,
+
     #[serde(rename = "@l")]
     #[serde(borrow)]
     pub(super) level: Option<Str<'a>>,
 
-    // GELF properties
-    #[serde(skip_serializing_if = "Gelf::is_empty")]
-    #[serde(default)]
-    pub(super) gelf: Gelf<'a>,
+    #[serde(rename = "@m")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(borrow)]
+    pub(super) message: Option<Str<'a>>,
 
-    // Common container properties
-    #[serde(skip_serializing_if = "Docker::is_empty")]
-    #[serde(default)]
-    pub(super) docker: Docker<'a>,
+    #[serde(rename = "@mt")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(borrow)]
+    pub(super) message_template: Option<Str<'a>>,
+
+    // This is mapped from `full_message`, which GELF suggests might contain a backtrace
+    #[serde(rename = "@x")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(borrow)]
+    pub(super) exception: Option<Str<'a>>,
+
+    // @i and @r are currently not implemented
 
     // Everything else
     #[serde(flatten)]
-    pub(super) additional: Option<Value>,
-}
-
-#[derive(Default, Debug, Serialize, Deserialize)]
-pub(super) struct Gelf<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(borrow)]
-    pub(super) host: Option<Str<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(borrow)]
-    pub(super) full_message: Option<Str<'a>>,
-}
-
-impl<'a> Gelf<'a> {
-    pub(super) fn is_empty(&self) -> bool {
-        #![deny(unused_variables)]
-
-        let Gelf {
-            ref host,
-            ref full_message,
-        } = self;
-
-        let ops = [host, full_message];
-
-        ops.iter().all(|o| o.is_none())
-    }
-}
-
-#[derive(Default, Debug, Serialize, Deserialize)]
-pub(super) struct Docker<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(borrow)]
-    pub(super) container_id: Option<Str<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(borrow)]
-    pub(super) command: Option<Str<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(borrow)]
-    pub(super) container_name: Option<Str<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(borrow)]
-    pub(super) created: Option<Str<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(borrow)]
-    pub(super) image_name: Option<Str<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(borrow)]
-    pub(super) image_id: Option<Str<'a>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(borrow)]
-    pub(super) tag: Option<Str<'a>>,
-}
-
-impl<'a> Docker<'a> {
-    fn is_empty(&self) -> bool {
-        #![deny(unused_variables)]
-
-        let Docker {
-            ref container_id,
-            ref command,
-            ref container_name,
-            ref created,
-            ref image_name,
-            ref image_id,
-            ref tag,
-        } = self;
-
-        let ops = [
-            container_id,
-            command,
-            container_name,
-            created,
-            image_name,
-            image_id,
-            tag,
-        ];
-
-        ops.iter().all(|o| o.is_none())
-    }
+    pub(super) additional: HashMap<String, Value>,
 }
 
 #[derive(Debug)]
@@ -187,13 +110,12 @@ impl<'de> Deserialize<'de> for Timestamp {
 impl<'a> Message<'a> {
     pub(super) fn from_message(msg: &'a str) -> Self {
         Message {
-            message: Some(Str::Borrowed(msg)),
-            template: None,
             timestamp: None,
-            gelf: Gelf::default(),
-            docker: Docker::default(),
-            additional: None,
             level: None,
+            message: Some(Str::Borrowed(msg)),
+            message_template: None,
+            exception: None,
+            additional: Default::default(),
         }
     }
 
