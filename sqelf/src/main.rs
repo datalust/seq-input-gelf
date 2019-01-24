@@ -10,10 +10,18 @@ pub mod server;
 mod config;
 
 pub use self::config::Config;
+use self::diagnostics::emit_err;
 
 use std::error;
 
-fn main() -> Result<(), Box<error::Error>> {
+fn main() {
+    if let Err(err) = run() {
+        emit_err(&err, "Server initialization failed");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<(), Box<error::Error>> {
     let config = Config::from_env()?;
 
     // The receiver for GELF messages
