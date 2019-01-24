@@ -1,4 +1,9 @@
-use std::{fmt, ops::Deref};
+use std::{
+    cmp::{Ord, Ordering, PartialOrd},
+    fmt,
+    hash::{Hash, Hasher},
+    ops::Deref,
+};
 
 use serde::{
     de::{self, Deserialize, Deserializer, Visitor},
@@ -28,6 +33,49 @@ where
             Str::Borrowed(s) => s,
             Str::Owned(ref s) => s.as_ref(),
         }
+    }
+}
+
+impl<'a, 'b, SA, SB> PartialEq<Str<'b, SB>> for Str<'a, SA>
+where
+    SA: AsRef<str>,
+    SB: AsRef<str>,
+{
+    fn eq(&self, other: &Str<'b, SB>) -> bool {
+        self.as_ref() == other.as_ref()
+    }
+}
+
+impl<'a, S> Eq for Str<'a, S> where Str<'a, S>: PartialEq {}
+
+impl<'a, S> Hash for Str<'a, S>
+where
+    S: AsRef<str>,
+{
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
+        self.as_ref().hash(state)
+    }
+}
+
+impl<'a, 'b, SA, SB> PartialOrd<Str<'b, SB>> for Str<'a, SA>
+where
+    SA: AsRef<str>,
+    SB: AsRef<str>,
+{
+    fn partial_cmp(&self, other: &Str<'b, SB>) -> Option<Ordering> {
+        self.as_ref().partial_cmp(other.as_ref())
+    }
+}
+
+impl<'a, S> Ord for Str<'a, S>
+where
+    S: AsRef<str>,
+{
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.as_ref().cmp(other.as_ref())
     }
 }
 

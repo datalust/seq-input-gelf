@@ -141,7 +141,7 @@ where
         // because we trust the configuration of the logger ahead of any one event.
         if let Some(additional) = self.additional() {
             for (k, v) in additional {
-                Self::override_value(&mut clef.additional, k.to_owned(), v.clone());
+                Self::override_value(&mut clef.additional, k, v.clone());
             }
         }
 
@@ -175,9 +175,13 @@ where
         clef
     }
 
-    fn override_value(fields: &mut HashMap<String, Value>, name: impl ToString, value: Value) {
-        if let Some(old) = fields.insert(name.to_string(), value) {
-            fields.insert(format!("__{}", name.to_string()), old);
+    fn override_value<'a>(
+        fields: &mut HashMap<Str<'a>, Value>,
+        name: &'a (impl AsRef<str> + ?Sized),
+        value: Value,
+    ) {
+        if let Some(old) = fields.insert(Str::Borrowed(name.as_ref()), value) {
+            fields.insert(Str::Owned(format!("__{}", name.as_ref())), old);
         }
     }
 

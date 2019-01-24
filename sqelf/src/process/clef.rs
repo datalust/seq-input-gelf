@@ -42,7 +42,7 @@ pub(super) struct Message<'a> {
 
     // Everything else
     #[serde(flatten)]
-    pub(super) additional: HashMap<String, Value>,
+    pub(super) additional: HashMap<Str<'a>, Value>,
 }
 
 #[derive(Debug)]
