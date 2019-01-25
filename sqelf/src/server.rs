@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, thread};
 
 use tokio::{
     codec::Decoder,
@@ -57,10 +57,12 @@ pub fn build(
     let shutdown = tokio_signal::ctrl_c().map_err(emit_abort("Server setup failed"));
 
     Ok(shutdown.and_then(move |shutdown| {
-        // Spawn a background task to process events
-        tokio::spawn(lazy(move || {
+        let process = tokio::spawn(lazy(move || {
             rx.for_each(move |msg| handle(msg).or_else(emit_continue("GELF processing failed")))
         }));
+
+        // Spawn a background task to poll `stdio`
+        let stdin_closed = stdin_closed().map(|_| Op::Shutdown).into_stream();
 
         // Listen for Ctrl + C and other termination signals
         // from the OS
@@ -76,6 +78,7 @@ pub fn build(
 
         server
             .select(shutdown)
+            .select(stdin_closed)
             .and_then(|msg| match msg {
                 // Continue processing received messages
                 Op::Receive(msg) => Ok(msg),
@@ -87,6 +90,7 @@ pub fn build(
                     Err(())
                 }
             })
+            // Process messages
             .filter_map(|msg| msg)
             .for_each(move |msg| {
                 let tx = tx.clone();
@@ -94,6 +98,9 @@ pub fn build(
                     .map(|_| ())
                     .or_else(emit_continue("GELF buffering failed"))
             })
+            // If we get this far then the server is shutting down
+            // Wait for the process to terminate
+            .then(|_| process)
     }))
 }
 
@@ -121,4 +128,26 @@ enum Op {
 
 fn receive_empty() -> Op {
     Op::Receive(None)
+}
+
+fn stdin_closed() -> impl Future<Item = (), Error = ()> {
+    let (tx, rx) = mpsc::channel(1);
+
+    thread::spawn(move || 'wait: loop {
+        match std::io::stdin().read(&mut [0]) {
+            Ok(0) => {
+                let _ = tx.send(()).wait();
+                break 'wait;
+            }
+            Ok(_) => {
+                continue 'wait;
+            }
+            Err(_) => {
+                let _ = tx.send(()).wait();
+                break 'wait;
+            }
+        }
+    });
+
+    rx.into_future().map(|_| ()).map_err(|_| ())
 }
