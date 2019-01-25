@@ -1,4 +1,4 @@
-use std::{io, net::SocketAddr, thread};
+use std::{net::SocketAddr, thread};
 
 use tokio::{
     codec::Decoder,
