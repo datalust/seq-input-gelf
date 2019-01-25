@@ -142,9 +142,6 @@ fn stdin_closed() -> impl Future<Item = (), Error = ()> {
             Ok(_) => {
                 continue 'wait;
             }
-            Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                continue 'wait;
-            }
             Err(_) => {
                 let _ = tx.send(()).wait();
                 break 'wait;
