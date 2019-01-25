@@ -1,8 +1,4 @@
-use std::{
-    io,
-    net::SocketAddr,
-    thread,
-};
+use std::{io, net::SocketAddr, thread};
 
 use tokio::{
     codec::Decoder,
@@ -66,9 +62,7 @@ pub fn build(
         }));
 
         // Spawn a background task to poll `stdio`
-        let stdin_closed = stdin_closed()
-            .map(|_| Op::Shutdown)
-            .into_stream();
+        let stdin_closed = stdin_closed().map(|_| Op::Shutdown).into_stream();
 
         // Listen for Ctrl + C and other termination signals
         // from the OS
@@ -137,43 +131,26 @@ fn receive_empty() -> Op {
 }
 
 fn stdin_closed() -> impl Future<Item = (), Error = ()> {
-    struct StdIo(std::sync::mpsc::Receiver<()>);
+    let (tx, rx) = mpsc::channel(1);
 
-    impl Future for StdIo {
-        type Item = ();
-        type Error = ();
-
-        fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-            if let Some(_) = self.0.try_recv().ok() {
-                Ok(Async::Ready(()))
-            } else {
-                Ok(Async::NotReady)
+    thread::spawn(move || 'wait: loop {
+        match std::io::stdin().read(&mut [0]) {
+            Ok(0) => {
+                let _ = tx.send(()).wait();
+                break 'wait;
             }
-        }
-    }
-
-    let (tx, rx) = std::sync::mpsc::channel();
-
-    thread::spawn(move || {
-        'wait: loop {
-            match std::io::stdin().read(&mut [0]) {
-                Ok(0) => {
-                    let _ = tx.send(());
-                    break 'wait;
-                },
-                Ok(_) => {
-                    continue 'wait;
-                },
-                Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
-                    continue 'wait;
-                },
-                Err(_) => {
-                    let _ = tx.send(());
-                    break 'wait;
-                },
+            Ok(_) => {
+                continue 'wait;
+            }
+            Err(ref err) if err.kind() == io::ErrorKind::WouldBlock => {
+                continue 'wait;
+            }
+            Err(_) => {
+                let _ = tx.send(()).wait();
+                break 'wait;
             }
         }
     });
 
-    StdIo(rx)
+    rx.into_future().map(|_| ()).map_err(|_| ())
 }
