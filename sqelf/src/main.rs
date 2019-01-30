@@ -13,10 +13,11 @@ pub use self::config::Config;
 use self::diagnostics::emit_err;
 
 use std::error;
+use failure::err_msg;
 
 fn main() {
     if let Err(err) = run() {
-        emit_err(&err, "Server initialization failed");
+        emit_err(&err, "sqelf failed");
         std::process::exit(1);
     }
 }
@@ -39,7 +40,9 @@ fn run() -> Result<(), Box<error::Error>> {
     // The server that drives the receiver and processor
     let server = server::build(config.server, receive, process)?;
 
-    tokio::run(server);
-
-    Ok(())
+    // Run the server and wait for it to exit
+    match tokio::runtime::current_thread::block_on_all(server) {
+        Ok(()) | Err(server::Exit::Clean) => Ok(()),
+        _ => Err(err_msg("Server execution failed").into())
+    }
 }
