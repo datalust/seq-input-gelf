@@ -50,8 +50,18 @@ pub(crate) fn emit_abort<TInner>(message_template: &'static str) -> impl Fn(TInn
 where
     TInner: Display,
 {
-    move |err| {
-        emit_err(&err, message_template);
+   emit_abort_with(message_template, || ())
+}
+
+/// For use with `map_err`
+pub(crate) fn emit_abort_with<TInner, TError>(message_template: &'static str, err: impl Fn() -> TError) -> impl Fn(TInner) -> TError
+where
+    TInner: Display,
+{
+    move |e| {
+        emit_err(&e, message_template);
+
+        err()
     }
 }
 

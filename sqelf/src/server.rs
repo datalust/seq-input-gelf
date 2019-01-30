@@ -48,15 +48,17 @@ pub fn build(
     config: Config,
     receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static,
     mut handle: impl FnMut(Message) -> Result<(), Error> + Send + Sync + 'static,
-) -> Result<impl Future<Item = (), Error = ()>, Error> {
+) -> Result<impl Future<Item = (), Error = Exit>, Error> {
     let addr: SocketAddr = config.bind.parse()?;
     let sock = UdpSocket::bind(&addr)?;
 
     let (tx, rx) = mpsc::channel(config.unprocessed_capacity);
 
-    let shutdown = tokio_signal::ctrl_c().map_err(emit_abort("Server setup failed"));
+    // Attempt to bind shutdown signals
+    let shutdown = tokio_signal::ctrl_c().map_err(emit_abort_with("Server setup failed", exit_failure));
 
     Ok(shutdown.and_then(move |shutdown| {
+        // Spawn a background task to process GELF payloads
         let process = tokio::spawn(lazy(move || {
             rx.for_each(move |msg| handle(msg).or_else(emit_continue("GELF processing failed")))
         }));
@@ -99,9 +101,35 @@ pub fn build(
                     .or_else(emit_continue("GELF buffering failed"))
             })
             // If we get this far then the server is shutting down
-            // Wait for the process to terminate
+            // Wait for the message pipeline to terminate
             .then(|_| process)
+            // FIXME: Forces the runtime to shutdown
+            // This is a bit of a hack that prevents
+            // `tokio` from waiting on any remaining futures
+            // since we're terminating the process
+            .then(|r| match r {
+                Ok(()) => Err(Exit::Clean),
+                Err(()) => Err(Exit::Failure),
+            })
     }))
+}
+
+/**
+The outcome of shutting down the server.
+*/
+pub enum Exit {
+    /**
+    The server was terminated, but was done so cleanly.
+    */
+    Clean,
+    /**
+    The server was terminated, but due to an internal error.
+    */
+    Failure,
+}
+
+fn exit_failure() -> Exit {
+    Exit::Failure
 }
 
 struct Decode<F>(F);
