@@ -2,13 +2,33 @@
 
 An app that accepts [Graylog Extended Log Format (GELF) messages](http://docs.graylog.org/en/2.5/pages/gelf.html) via UDP and writes them to [Seq](https://datalust.co/seq).
 
-## Getting started on Windows
+## Getting started on Windows (requires Seq 5.1+)
 
 On Windows, the GELF input is installed into Seq as a Seq App.
 
-> **Note:** packaging for Seq on Windows is still in progress; please track this via [#10](https://github.com/datalust/sqelf/issues/10).
+![Seq GELF input](https://raw.githubusercontent.com/datalust/sqelf/master/asset/app-screenshot.png)
 
-## Getting started with Docker
+**1. Install the app package**
+
+In _Settings_ > _Apps_, choose _Install from NuGet_. The app package id is [Seq.Input.Gelf](https://nuget.org/packages/Seq.Input.Gelf).
+
+**2. Start an instance of the app**
+
+From the apps screen, choose _Add Instance_ and give the new GELF input a name.
+
+The default settings will cause the GELF input to listen on localhost port 12201. Choose a different port if required.
+
+Select _Save Changes_ to start the input.
+
+**3. Configure Windows Firewall**
+
+Ensure UDP port 12201 (or the selected port, if you specified a different one), is allowed through Windows Firewall.
+
+**4. Log some events!**
+
+That's all there is to it. Events ingested through the input will appear in the _Events_ stream. If the input doesn't work, check for diagnostic events raised by the input app (there is some status information shown under the app instance name).
+
+## Getting started with Docker (all versions)
 
 For Docker, the app is deployed as a Docker container that is expected to run alongside the Seq container. The `datalust/sqelf` container accepts UDP GELF payloads on port 12201, and forwards them to the Seq ingestion endpoint specified in the `SEQ_ADDRESS` environment variable.
 
