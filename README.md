@@ -1,10 +1,10 @@
-# `sqelf` [![Build status](https://ci.appveyor.com/api/projects/status/t32q67tvbvsgjxck?svg=true)](https://ci.appveyor.com/project/datalust/sqelf)
+# `sqelf` [![Build status](https://ci.appveyor.com/api/projects/status/t32q67tvbvsgjxck?svg=true)](https://ci.appveyor.com/project/datalust/sqelf) [![Seq.Input.Gelf](https://img.shields.io/nuget/v/Seq.Input.Gelf.svg?style=flat)](https://nuget.org/packages/Seq.Input.Gelf) [![datalust/sqelf](https://img.shields.io/badge/docker-datalust%2Fsqelf-yellowgreen.svg)](https://hub.docker.com/r/datalust/sqelf)
 
-An app that accepts [Graylog Extended Log Format (GELF) messages](http://docs.graylog.org/en/2.5/pages/gelf.html) via UDP and writes them to [Seq](https://datalust.co/seq).
+Ingest [Graylog Extended Log Format (GELF) messages](http://docs.graylog.org/en/2.5/pages/gelf.html) via UDP into [Seq](https://datalust.co/seq). The app is packaged both as a plug-in Seq App for all platforms, and as a standalone Docker container that forwards events to Seq via its HTTP API.
 
 ## Getting started on Windows (requires Seq 5.1+)
 
-On Windows, the GELF input is installed into Seq as a Seq App.
+On Windows, the GELF input is installed into Seq as a [Seq App](https://docs.getseq.net/docs/installing-seq-apps).
 
 ![Seq GELF input](https://raw.githubusercontent.com/datalust/sqelf/master/asset/app-screenshot.png)
 
@@ -27,6 +27,8 @@ Ensure UDP port 12201 (or the selected port, if you specified a different one), 
 **4. Log some events!**
 
 That's all there is to it. Events ingested through the input will appear in the _Events_ stream. If the input doesn't work, check for diagnostic events raised by the input app (there is some status information shown under the app instance name).
+
+Events ingested by the input will be associated with the default _None_ [API key](https://docs.getseq.net/docs/api-keys), which can be used to attach properties, apply filters, or set a minimum level for the ingested events.
 
 ## Getting started with Docker (all versions)
 
