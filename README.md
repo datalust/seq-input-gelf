@@ -1,4 +1,4 @@
-# `sqelf`
+# `sqelf` [![Build status](https://ci.appveyor.com/api/projects/status/t32q67tvbvsgjxck?svg=true)](https://ci.appveyor.com/project/datalust/sqelf)
 
 An app that accepts [Graylog Extended Log Format (GELF) messages](http://docs.graylog.org/en/2.5/pages/gelf.html) via UDP and writes them to [Seq](https://datalust.co/seq).
 
