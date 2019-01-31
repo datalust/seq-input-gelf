@@ -134,7 +134,14 @@ where
 
         // Set the exception, giving priority to the embedded CLEF exception.
         if clef.exception.is_none() {
-            clef.exception = full_message.as_ref().map(AsRef::as_ref).map(Str::Borrowed);
+            clef.exception = full_message
+                .as_ref()
+                .map(AsRef::as_ref)
+                // If the full message is the same as the short message then don't
+                // bother setting it. Some clients will defensively send the same
+                // value in both fields.
+                .filter(|full_message| *full_message != short_message.as_ref())
+                .map(Str::Borrowed);
         }
 
         // Set additional properties first; these override any in an embedded CLEF payload,
@@ -146,11 +153,13 @@ where
         }
 
         // Set GELF built-in properties; we also trust these ahead of any one event's properties.
-        Self::override_value(
-            &mut clef.additional,
-            "host",
-            host.as_ref().to_string().into(),
-        );
+        if let Some(host) = host {
+            Self::override_value(
+                &mut clef.additional,
+                "host",
+                host.as_ref().to_string().into(),
+            );
+        }
 
         if let Some(facility) = facility {
             Self::override_value(
