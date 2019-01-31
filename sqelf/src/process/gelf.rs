@@ -3,8 +3,8 @@ use serde_json::Value;
 #[derive(Debug, Deserialize)]
 pub(super) struct Message<TString, TMessage = TString> {
     // GELF built-ins
-    pub(super) version: TString,
-    pub(super) host: TString,
+    pub(super) version: Option<TString>,
+    pub(super) host: Option<TString>,
     pub(super) short_message: TMessage,
     pub(super) full_message: Option<TMessage>,
     pub(super) timestamp: Option<f64>,
