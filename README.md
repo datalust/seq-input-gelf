@@ -40,7 +40,7 @@ To run the container:
 $ docker run \
     --rm \
     -it \
-    -p 12201:12201 \
+    -p 12201:12201/udp \
     -e SEQ_ADDRESS=https://seq.example.com \
     datalust/sqelf
 ```
