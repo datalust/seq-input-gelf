@@ -8,7 +8,7 @@ use tokio::{
 
 use bytes::{Bytes, BytesMut};
 
-use futures::{future::lazy, sync::mpsc};
+use futures::{future::lazy, sync::mpsc, future::Either};
 
 pub type Error = failure::Error;
 
@@ -30,6 +30,16 @@ pub struct Config {
     If this value is reached then incoming messages will be dropped.
     */
     pub unprocessed_capacity: usize,
+
+    /**
+    Whether or not the server should wait on (and terminate on the completion of)
+    the process's standard input.
+
+    This is used by Seq on Windows to signal to a
+    background process - which has no window to receive WM_CLOSE, and no console
+    to receive Ctrl+C, that the process should exit.
+    */
+    pub wait_on_stdin: bool,
 }
 
 impl Default for Config {
@@ -37,6 +47,7 @@ impl Default for Config {
         Config {
             bind: "0.0.0.0:12201".to_owned(),
             unprocessed_capacity: 1024,
+            wait_on_stdin: false,
         }
     }
 }
@@ -64,7 +75,12 @@ pub fn build(
         }));
 
         // Spawn a background task to poll `stdio`
-        let stdin_closed = stdin_closed().map(|_| Op::Shutdown).into_stream();
+        let stdin_closed = if config.wait_on_stdin {
+            Either::A(stdin_closed()
+                .map(|_| Op::Shutdown))
+        } else {
+            Either::B(future::empty())
+        }.into_stream();
 
         // Listen for Ctrl + C and other termination signals
         // from the OS
