@@ -17,7 +17,7 @@ use failure::err_msg;
 
 fn main() {
     if let Err(err) = run() {
-        emit_err(&err, "sqelf failed");
+        emit_err(&err, "GELF input failed");
         std::process::exit(1);
     }
 }
