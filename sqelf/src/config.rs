@@ -15,11 +15,16 @@ impl Config {
     pub fn from_env() -> Result<Self, Error> {
         let mut config = Config::default();
 
-        if is_seq_app() {
-            set(&mut config.server.bind, "SEQ_APP_SETTING_GELFADDRESS")?;
+        let is_seq_app = is_seq_app();
+        config.server.wait_on_stdin = is_seq_app;
+
+        let bind_address_var = if is_seq_app {
+            "SEQ_APP_SETTING_GELFADDRESS"
         } else {
-            set(&mut config.server.bind, "GELF_ADDRESS")?;
-        }
+            "GELF_ADDRESS"
+        };
+
+        read_environment(&mut config.server.bind, bind_address_var)?;
 
         Ok(config)
     }
@@ -29,7 +34,7 @@ fn is_seq_app() -> bool {
     env::var("SEQ_APP_ID").is_ok()
 }
 
-fn set<T>(set: &mut T, name: impl AsRef<str>) -> Result<(), Error>
+fn read_environment<T>(into: &mut T, name: impl AsRef<str>) -> Result<(), Error>
 where
     T: FromStr,
     T::Err: std::error::Error + Send + Sync + 'static,
@@ -43,7 +48,7 @@ where
         Err(e) => Err(e)?,
         // The environment variable has a value
         Ok(v) => {
-            *set = T::from_str(&v)?;
+            *into = T::from_str(&v)?;
 
             Ok(())
         }
