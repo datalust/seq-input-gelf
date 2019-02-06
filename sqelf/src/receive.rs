@@ -180,7 +180,9 @@ impl Gelf {
 
     fn gc(&mut self) -> Result<(), Error> {
         // Check the capacity of the incomplete chunk list
-        if self.by_id.chunks.len() == self.config.incomplete_capacity {
+        // If we're past the threshold then drop *all* chunks,
+        // whether they've expired or not.
+        if self.by_id.chunks.len() >= self.config.incomplete_capacity {
             self.by_id.chunks.clear();
             self.by_arrival.chunks.clear();
         }
