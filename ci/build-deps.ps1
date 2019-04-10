@@ -15,65 +15,62 @@ function Write-BeginStep($invocation)
     Write-Output "###########################################################"
     Write-Output ""
 }
-function Initialize-Docker
+
+function Run-Command
 {
-    Write-BeginStep $MYINVOCATION
+    Param ($Exe, $ArgumentList)
+
+    # For commands that treat stderr like stdetc
+    $out = New-TemporaryFile
+    $err = New-TemporaryFile
+    $r = Start-Process $Exe -ArgumentList $ArgumentList -Wait -PassThru -RedirectStandardOut $out.FullName -RedirectStandardError $err.FullName
+
+    Write-Output "STDOUT"
+    Get-Content -Path $out.FullName
+    Write-Output ""
+
+    Write-Output "STDERR"
+    Get-Content -Path $err.FullName
+    Write-Output ""
     
-    if ($IsCIBuild) {
-        Write-Output "Switching Docker to Linux containers..."
-        
-        docker-switch-linux
-        if ($LASTEXITCODE) { exit 1 }
+    Remove-Item $out.FullName
+    Remove-Item $err.FullName
+
+    if ($r.ExitCode -ne 0) {
+        exit $r.ExitCode
     }
 }
 
 function Initialize-Filesystem
 {
     Write-BeginStep $MYINVOCATION
-    
-    if (Test-Path .\publish) {
-        Remove-Item .\publish -Recurse
-    }
 
-    mkdir .\publish
-
-    if ($IsCIBuild)
+    if (Test-Path .\publish)
     {
-        $hostShare = "X:\host"
-        ls $hostshare
-
-        mkdir "$hostShare/src"
-        Copy-Item -Path ./* -Recurse -Destination "$hostShare/src"
-
-        mkdir "$hostShare\tmp"
-        $env:TMP = "$hostShare\tmp"
-        $env:TEMP = "$hostShare\tmp"
+        Remove-Item -Recurse -Force .\publish
     }
+
+    New-Item -ItemType Directory .\publish
 }
 
 function Invoke-LinuxBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    if ($IsCIBuild) {
-        $hostShare = "X:\host"
-        Push-Location "$hostShare/src"
-    }
+    Run-Command -Exe cargo -ArgumentList 'build', '--release', '--target x86_64-unknown-linux-musl'
+}
+function Invoke-LinuxTests
+{
+    Write-BeginStep $MYINVOCATION
 
-    & "./ci/cross-build.ps1" 2>&1
-    if ($LASTEXITCODE) { exit 1 }
-    
-    if ($IsCIBuild) {
-        Pop-Location
-        Copy-Item -Path "$hostShare/src/target" -Recurse -Destination . -Container
-    }
+    Run-Command -Exe cargo -ArgumentList 'test', '--target x86_64-unknown-linux-musl'
 }
 
 function Invoke-DockerBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    & docker build --file dockerfiles/Dockerfile -t sqelf-ci:latest .
+    docker build --file dockerfiles/Dockerfile -t sqelf-ci:latest .
     if ($LASTEXITCODE) { exit 1 }
 }
 
@@ -81,20 +78,20 @@ function Invoke-WindowsBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    # Cargo writes to STDERR
-    $ErrorActionPreference = "SilentlyContinue"
+    Run-Command -Exe cargo -ArgumentList 'build', '--release', '--target x86_64-pc-windows-msvc'
+}
+function Invoke-WindowsTests
+{
+    Write-BeginStep $MYINVOCATION
 
-    cargo build --release --target=x86_64-pc-windows-msvc
-    if ($LASTEXITCODE) { exit 1 }
-
-    $ErrorActionPreference = "Stop"
+    Run-Command -Exe cargo -ArgumentList 'test', '--target x86_64-pc-windows-msvc'
 }
 
 function Invoke-NuGetPack($version)
 {
     Write-BeginStep $MYINVOCATION
 
-    & .\tool\nuget.exe pack .\Seq.Input.Gelf.nuspec -version $version -outputdirectory .\publish
+    .\tool\nuget.exe pack .\Seq.Input.Gelf.nuspec -version $version -outputdirectory .\publish
     if ($LASTEXITCODE) { exit 1 }
 }
 
@@ -102,7 +99,7 @@ function Publish-Container($version)
 {
     Write-BeginStep $MYINVOCATION
 
-    & docker tag sqelf-ci:latest datalust/sqelf-ci:$version
+    docker tag sqelf-ci:latest datalust/sqelf-ci:$version
     if ($LASTEXITCODE) { exit 1 }
 
     if ($IsCIBuild)
@@ -111,7 +108,7 @@ function Publish-Container($version)
         if ($LASTEXITCODE) { exit 1 }
     }
 
-    & docker push datalust/sqelf-ci:$version
+    docker push datalust/sqelf-ci:$version
     if ($LASTEXITCODE) { exit 1 }
 }
 
@@ -122,19 +119,19 @@ function Start-SeqEnvironment {
 
     $ErrorActionPreference = "SilentlyContinue"
 
-    & docker rm -f sqelf-test-seq | Out-Null
-    & docker rm -f sqelf-test-sqelf | Out-Null
+    docker rm -f sqelf-test-seq | Out-Null
+    docker rm -f sqelf-test-sqelf | Out-Null
 
-    & docker network rm sqelf-test | Out-Null
+    docker network rm sqelf-test | Out-Null
 
-    & docker network create sqelf-test
+    docker network create sqelf-test
     if ($LASTEXITCODE) {
         Pop-Location
         exit 1
     }
 
-    & docker pull datalust/seq:latest
-    & docker run --name sqelf-test-seq `
+    docker pull datalust/seq:latest
+    docker run --name sqelf-test-seq `
         --network sqelf-test `
         -e ACCEPT_EULA=Y `
         -itd `
@@ -145,7 +142,7 @@ function Start-SeqEnvironment {
         exit 1
     }
 
-    & docker run --name sqelf-test-sqelf `
+    docker run --name sqelf-test-sqelf `
         --network sqelf-test `
         -e SEQ_ADDRESS=http://sqelf-test-seq:5341 `
         -itd `
@@ -169,19 +166,19 @@ function Stop-SeqEnvironment {
 
     Push-Location ci/smoke-test
 
-    & docker rm -f sqelf-test-seq
+    docker rm -f sqelf-test-seq
     if ($LASTEXITCODE) {
         Pop-Location
         exit 1
     }
 
-    & docker rm -f sqelf-test-sqelf
+    docker rm -f sqelf-test-sqelf
     if ($LASTEXITCODE) {
         Pop-Location
         exit 1
     }
 
-    & docker network rm sqelf-test
+    docker network rm sqelf-test
     if ($LASTEXITCODE) {
         Pop-Location
         exit 1
@@ -193,16 +190,16 @@ function Stop-SeqEnvironment {
 function Build-TestAppContainer {
     Write-BeginStep $MYINVOCATION
 
-    & docker build --file ci/smoke-test/app/Dockerfile -t sqelf-app-test:latest .
+    docker build --file ci/smoke-test/app/Dockerfile -t sqelf-app-test:latest .
     if ($LASTEXITCODE) { exit 1 }
 }
 
 function Invoke-TestApp {
     Write-BeginStep $MYINVOCATION
 
-    & docker run `
+    docker run `
         --rm `
-        -it `
+        -i `
         --log-driver gelf `
         --log-opt gelf-address=udp://localhost:12202 `
         sqelf-app-test:latest
@@ -227,11 +224,11 @@ function Check-ClefOutput {
 function Check-SqelfLogs {
     Write-BeginStep $MYINVOCATION
 
-    & docker logs sqelf-test-sqelf
+    docker logs sqelf-test-sqelf
 }
 
 function Check-SeqLogs {
     Write-BeginStep $MYINVOCATION
 
-    & docker logs sqelf-test-seq
+    docker logs sqelf-test-seq
 }

@@ -6,10 +6,12 @@ use serde_json::Value;
 
 use self::str::{CachedString, Inlinable, Str};
 
-use crate::io::MemRead;
-use std::collections::HashMap;
+use crate::{
+    error::Error,
+    io::MemRead,
+};
 
-pub type Error = failure::Error;
+use std::collections::HashMap;
 
 /**
 Configuration for CELF formatting.
