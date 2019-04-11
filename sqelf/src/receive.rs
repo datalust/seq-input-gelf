@@ -6,12 +6,12 @@ use std::{
 };
 
 use bytes::{Buf, Bytes, IntoBuf};
-use failure::bail;
 use libflate::{gzip, zlib};
 
-use crate::io::MemRead;
-
-pub type Error = failure::Error;
+use crate::{
+    error::Error,
+    io::MemRead,
+};
 
 /**
 GELF receiver configuration.
@@ -102,7 +102,7 @@ impl ByArrival {
     fn ts(&mut self) -> Result<UniqueTimestamp, Error> {
         let now = SystemTime::now().duration_since(time::UNIX_EPOCH)?;
         let counter = self.counter;
-        self.counter.wrapping_add(1);
+        self.counter = self.counter.wrapping_add(1);
 
         Ok(UniqueTimestamp(now, counter))
     }
@@ -806,6 +806,7 @@ mod tests {
             .expect("failed to decode message");
 
         assert_eq!(2, gelf.by_id.chunks.len());
+        assert_eq!(2, gelf.by_arrival.chunks.len());
 
         // Adding another chunk should tip over the capacity threshold
         // After this, there should only be the last message chunk added
@@ -826,7 +827,7 @@ mod tests {
 
         gelf.decode(chunk(0, 0, 3, b"1"))
             .expect("failed to decode message");
-
+        
         gelf.decode(chunk(1, 0, 3, b"2"))
             .expect("failed to decode message");
 

@@ -10,10 +10,11 @@ use bytes::{Bytes, BytesMut};
 
 use futures::{future::lazy, sync::mpsc, future::Either};
 
-pub type Error = failure::Error;
-
-use crate::diagnostics::*;
-use crate::receive::Message;
+use crate::{
+    error::Error,
+    diagnostics::*,
+    receive::Message,
+};
 
 /**
 Server configuration.

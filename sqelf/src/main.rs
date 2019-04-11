@@ -1,6 +1,9 @@
 #[macro_use]
 extern crate serde_derive;
 
+#[macro_use]
+pub mod error;
+
 mod diagnostics;
 pub mod io;
 pub mod process;
@@ -10,10 +13,13 @@ pub mod server;
 mod config;
 
 pub use self::config::Config;
-use self::diagnostics::emit_err;
-
-use std::error;
-use failure::err_msg;
+use self::{
+    diagnostics::emit_err,
+    error::{
+        Error,
+        err_msg,
+    },
+};
 
 fn main() {
     if let Err(err) = run() {
@@ -22,7 +28,7 @@ fn main() {
     }
 }
 
-fn run() -> Result<(), Box<error::Error>> {
+fn run() -> Result<(), error::StdError> {
     let config = Config::from_env()?;
 
     // The receiver for GELF messages

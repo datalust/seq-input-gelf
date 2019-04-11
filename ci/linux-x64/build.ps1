@@ -3,22 +3,14 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
-Push-Location "$PSScriptRoot/../"
+Push-Location "$PSScriptRoot/../../"
 
 . "./ci/build-deps.ps1"
 
-Initialize-Docker
 Initialize-Filesystem
 Invoke-LinuxBuild
+Invoke-LinuxTests
 Invoke-DockerBuild
-
-if ($IsWindows) {
-    Invoke-WindowsBuild
-    Invoke-NuGetPack $shortver
-}
-else {
-    Write-Output "Not running Windows build"
-}
 
 Build-TestAppContainer
 Start-SeqEnvironment
@@ -29,7 +21,7 @@ Check-ClefOutput
 Stop-SeqEnvironment
 
 if ($IsPublishedBuild) {
-    Publish-Container $shortver
+    Publish-Container (Get-SemVer $shortver)
 }
 else {
     Write-Output "Not publishing Docker container"

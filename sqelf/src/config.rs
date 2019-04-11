@@ -1,8 +1,6 @@
 use std::{env, str::FromStr};
 
-use crate::{process, receive, server};
-
-pub type Error = failure::Error;
+use crate::{Error, process, receive, server};
 
 #[derive(Debug, Default, Clone)]
 pub struct Config {
