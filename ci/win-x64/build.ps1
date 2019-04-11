@@ -11,6 +11,6 @@ Initialize-Filesystem
 Invoke-WindowsBuild
 Invoke-WindowsTests
 Invoke-LinuxBuild
-Invoke-NuGetPack $shortver
+Invoke-NuGetPack (Get-SemVer $shortver)
 
 Pop-Location

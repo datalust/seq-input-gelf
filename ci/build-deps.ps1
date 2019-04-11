@@ -1,8 +1,5 @@
 $IsCIBuild = $null -ne $env:APPVEYOR_BUILD_NUMBER
-$IsPublishedBuild = $env:APPVEYOR_REPO_BRANCH -eq "master" -and $null -eq $env:APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH
-
-$IsCIBuild = $null -ne $env:APPVEYOR_BUILD_NUMBER
-$IsPublishedBuild = $env:APPVEYOR_REPO_BRANCH -eq "master" -and $null -eq $env:APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH
+$IsPublishedBuild = $IsCIBuild -and $null -eq $env:APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH
 
 function Write-BeginStep($invocation)
 {
@@ -14,6 +11,19 @@ function Write-BeginStep($invocation)
     }
     Write-Output "###########################################################"
     Write-Output ""
+}
+
+function Get-SemVer($shortver)
+{
+    # This script originally (c) 2016 Serilog Contributors - license Apache 2.0
+    $branch = @{ $true = $env:APPVEYOR_REPO_BRANCH; $false = $(git symbolic-ref --short -q HEAD) }[$env:APPVEYOR_REPO_BRANCH -ne $NULL];
+    $suffix = @{ $true = ""; $false = "$($branch.Substring(0, [math]::Min(10,$branch.Length)))"}[$branch -eq "master"]
+
+    if ($suffix) {
+        $shortver + "-" + $suffix
+    } else {
+        $shortver
+    }
 }
 
 function Run-Command

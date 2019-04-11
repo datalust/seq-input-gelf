@@ -21,7 +21,7 @@ Check-ClefOutput
 Stop-SeqEnvironment
 
 if ($IsPublishedBuild) {
-    Publish-Container $shortver
+    Publish-Container (Get-SemVer $shortver)
 }
 else {
     Write-Output "Not publishing Docker container"
