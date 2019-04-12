@@ -1,4 +1,5 @@
 #!/bin/bash
+set -eo pipefail
 
 # Add an API Key if specified
 api_key_arg=

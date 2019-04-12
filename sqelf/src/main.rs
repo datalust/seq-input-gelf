@@ -21,8 +21,14 @@ use self::{
     },
 };
 
+use std::panic::catch_unwind;
+
 fn main() {
-    if let Err(err) = run() {
+    let run_server = catch_unwind(|| run())
+        .map_err(|panic| error::unwrap_panic(panic).into())
+        .and_then(|inner| inner);
+
+    if let Err(err) = run_server {
         emit_err(&err, "GELF input failed");
         std::process::exit(1);
     }

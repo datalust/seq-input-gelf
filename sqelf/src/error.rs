@@ -1,6 +1,7 @@
 use std::{
     fmt,
     error,
+    any::Any,
 };
 
 pub(crate) type StdError = Box<error::Error + Send + Sync>;
@@ -54,6 +55,18 @@ impl From<Error> for StdError {
 
 pub(crate) fn err_msg(msg: impl fmt::Display) -> Error {
     Error(Inner(msg.to_string()))
+}
+
+pub(crate) fn unwrap_panic(panic: Box<dyn Any + Send + 'static>) ->  Error {
+    if let Some(err) = panic.downcast_ref::<&str>() {
+        return Error(Inner((*err).into()));
+    }
+
+    if let Some(err) = panic.downcast_ref::<String>() {
+        return Error(Inner((*err).clone()))
+    }
+
+    err_msg("unexpected panic (this is a bug)")
 }
 
 macro_rules! bail {

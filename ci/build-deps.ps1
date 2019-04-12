@@ -80,7 +80,7 @@ function Invoke-DockerBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    docker build --file dockerfiles/Dockerfile -t sqelf-ci:latest .
+    docker build --no-cache --file dockerfiles/Dockerfile -t sqelf-ci:latest .
     if ($LASTEXITCODE) { exit 1 }
 }
 
