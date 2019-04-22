@@ -1,6 +1,6 @@
 FROM datalust/seqcli:latest
 
-COPY target/x86_64-unknown-linux-gnu/release/sqelf /bin/sqelf
+COPY target/x86_64-unknown-linux-musl/release/sqelf /bin/sqelf
 COPY dockerfiles/run.sh /run.sh
 
 EXPOSE 12201
