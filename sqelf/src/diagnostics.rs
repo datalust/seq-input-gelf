@@ -31,7 +31,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            metrics_interval_ms: 5 * 1000 * 60,
+            metrics_interval_ms: 1 * 1000 * 60, // 1 minute
             min_level: Level::Error,
         }
     }
@@ -203,7 +203,7 @@ pub fn emit_metrics() {
         let evt = DiagnosticEvent::new(
             "DEBUG",
             None,
-            "collected GELF server metrics",
+            "Collected GELF server metrics",
             Some(metrics),
         );
         let json = serde_json::to_string(&evt).expect("infallible JSON");

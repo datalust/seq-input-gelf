@@ -50,7 +50,7 @@ impl Default for Config {
         Config {
             incomplete_capacity: 1024,
             max_chunks_per_message: 128,
-            incomplete_timeout_ms: 5 * 1000,
+            incomplete_timeout_ms: 5 * 1000, // 5 seconds
         }
     }
 }
