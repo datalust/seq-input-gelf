@@ -8,10 +8,14 @@ use std::{
 use bytes::{Buf, Bytes, IntoBuf};
 use libflate::{gzip, zlib};
 
-use crate::{
-    error::Error,
-    io::MemRead,
-};
+use crate::{error::Error, io::MemRead};
+
+metrics! {
+    chunk,
+    msg_chunked,
+    msg_unchunked,
+    overflow_incomplete_chunks
+}
 
 /**
 GELF receiver configuration.
@@ -46,7 +50,7 @@ impl Default for Config {
         Config {
             incomplete_capacity: 1024,
             max_chunks_per_message: 128,
-            incomplete_timeout_ms: 5 * 1000,
+            incomplete_timeout_ms: 5 * 1000, // 5 seconds
         }
     }
 }
@@ -132,11 +136,15 @@ impl Gelf {
         let magic = Message::peek_magic_bytes(&src);
 
         if magic == Some(Message::MAGIC_CHUNKED) {
+            increment!(receive.chunk);
+
             // Push a chunk onto a message
             // If the chunk completes the message then it
             // will be returned
             self.chunked(src)
         } else {
+            increment!(receive.msg_unchunked);
+
             // Return a message containing a single chunk
             Ok(Message::single(magic.and_then(Compression::detect), src))
         }
@@ -183,6 +191,8 @@ impl Gelf {
         // If we're past the threshold then drop *all* chunks,
         // whether they've expired or not.
         if self.by_id.chunks.len() >= self.config.incomplete_capacity {
+            increment!(receive.overflow_incomplete_chunks);
+
             self.by_id.chunks.clear();
             self.by_arrival.chunks.clear();
         }
@@ -235,6 +245,8 @@ impl Gelf {
                 if chunks.is_complete() {
                     let (_, (chunks, arrival)) = entry.remove_entry();
                     self.by_arrival.chunks.remove(&arrival);
+
+                    increment!(receive.msg_chunked);
 
                     Ok(Message::chunked(
                         chunks.inner.into_iter().map(|(_, chunk)| chunk),
@@ -827,7 +839,7 @@ mod tests {
 
         gelf.decode(chunk(0, 0, 3, b"1"))
             .expect("failed to decode message");
-        
+
         gelf.decode(chunk(1, 0, 3, b"2"))
             .expect("failed to decode message");
 

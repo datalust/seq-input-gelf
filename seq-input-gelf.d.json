@@ -16,6 +16,12 @@
         "displayName": "GELF address",
         "helpText": "The socket address (IP address and port) on which the input will listen for UDP GELF payloads. The default is `0.0.0.0:12201`.",
         "isOptional": true
+      },
+      "enableDiagnostics": {
+        "inputType": "Checkbox",
+        "displayName": "Enable diagnostics",
+        "helpText": "Controls the verbosity of diagnostic logs produced by the server. When enabled metrics will be regularly sampled",
+        "isOptional": true
       }
     }
   }

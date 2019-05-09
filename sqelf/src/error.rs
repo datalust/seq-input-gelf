@@ -1,10 +1,6 @@
-use std::{
-    fmt,
-    error,
-    any::Any,
-};
+use std::{any::Any, error, fmt};
 
-pub(crate) type StdError = Box<error::Error + Send + Sync>;
+pub(crate) type StdError = Box<dyn error::Error + Send + Sync>;
 
 pub struct Error(Inner);
 
@@ -34,9 +30,7 @@ impl fmt::Display for Inner {
     }
 }
 
-impl error::Error for Inner {
-
-}
+impl error::Error for Inner {}
 
 impl<E> From<E> for Error
 where
@@ -57,13 +51,13 @@ pub(crate) fn err_msg(msg: impl fmt::Display) -> Error {
     Error(Inner(msg.to_string()))
 }
 
-pub(crate) fn unwrap_panic(panic: Box<dyn Any + Send + 'static>) ->  Error {
+pub(crate) fn unwrap_panic(panic: Box<dyn Any + Send + 'static>) -> Error {
     if let Some(err) = panic.downcast_ref::<&str>() {
         return Error(Inner((*err).into()));
     }
 
     if let Some(err) = panic.downcast_ref::<String>() {
-        return Error(Inner((*err).clone()))
+        return Error(Inner((*err).clone()));
     }
 
     err_msg("unexpected panic (this is a bug)")
