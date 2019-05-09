@@ -1,12 +1,13 @@
 use std::{env, str::FromStr};
 
-use crate::{Error, process, receive, server};
+use crate::{diagnostics, process, receive, server, Error};
 
 #[derive(Debug, Default, Clone)]
 pub struct Config {
     pub receive: receive::Config,
     pub process: process::Config,
     pub server: server::Config,
+    pub diagnostics: diagnostics::Config,
 }
 
 impl Config {
@@ -24,6 +25,14 @@ impl Config {
 
         read_environment(&mut config.server.bind, bind_address_var)?;
 
+        let min_level = if is_seq_app {
+            "SEQ_APP_SETTING_GELFMINSELFLOGLEVEL"
+        } else {
+            "GELF_MIN_SELF_LOG_LEVEL"
+        };
+
+        read_environment(&mut config.diagnostics.min_level, min_level)?;
+
         Ok(config)
     }
 }
@@ -35,7 +44,7 @@ fn is_seq_app() -> bool {
 fn read_environment<T>(into: &mut T, name: impl AsRef<str>) -> Result<(), Error>
 where
     T: FromStr,
-    T::Err: std::error::Error + Send + Sync + 'static,
+    Error: From<T::Err>,
 {
     match env::var(name.as_ref()) {
         // The environment variable exists, but is empty

@@ -16,6 +16,11 @@
         "displayName": "GELF address",
         "helpText": "The socket address (IP address and port) on which the input will listen for UDP GELF payloads. The default is `0.0.0.0:12201`.",
         "isOptional": true
+      },
+      "gelfMinSelfLogLevel": {
+        "displayName": "Minimum self log level",
+        "helpText": "Controls the verbosity of diagnostic logs produced by the server. Valid values are `DEBUG` or `ERROR`. If the value is `DEBUG` then metrics will be periodically sampled. The default is `ERROR`.",
+        "isOptional": true
       }
     }
   }

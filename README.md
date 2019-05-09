@@ -55,7 +55,8 @@ A `sqelf` container can be configured using the following environment variables:
 | -------- | ----------- | ------- |
 | `SEQ_ADDRESS`| The address of the Seq server to forward events to | `http://localhost:5341` |
 | `SEQ_API_KEY` | The API key to use | - |
-| `GELF_ADDRESS` | The address to bind the UDP GELF server to | `0.0.0.0:12201`
+| `GELF_ADDRESS` | The address to bind the UDP GELF server to | `0.0.0.0:12201` |
+| `GELF_MIN_SELF_LOG_LEVEL` | The internal logging level to use. Valid values include `DEBUG` or `ERROR`. Metrics will be sampled periodically when the level is `DEBUG`. | `ERROR` |
 
 ### Quick local setup with `docker-compose`
 

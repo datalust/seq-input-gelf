@@ -8,13 +8,16 @@ use tokio::{
 
 use bytes::{Bytes, BytesMut};
 
-use futures::{future::lazy, sync::mpsc, future::Either};
+use futures::{future::lazy, future::Either, sync::mpsc};
 
-use crate::{
-    error::Error,
-    diagnostics::*,
-    receive::Message,
-};
+use crate::{diagnostics::*, error::Error, receive::Message};
+
+metrics! {
+    receive_ok,
+    receive_err,
+    process_ok,
+    process_err
+}
 
 /**
 Server configuration.
@@ -67,21 +70,30 @@ pub fn build(
     let (tx, rx) = mpsc::channel(config.unprocessed_capacity);
 
     // Attempt to bind shutdown signals
-    let shutdown = tokio_signal::ctrl_c().map_err(emit_abort_with("Server setup failed", exit_failure));
+    let shutdown =
+        tokio_signal::ctrl_c().map_err(emit_abort_with("Server setup failed", exit_failure));
 
     Ok(shutdown.and_then(move |shutdown| {
         // Spawn a background task to process GELF payloads
         let process = tokio::spawn(lazy(move || {
-            rx.for_each(move |msg| handle(msg).or_else(emit_continue("GELF processing failed")))
+            rx.for_each(move |msg| {
+                let r = handle(msg);
+                match r {
+                    Ok(_) => increment!(server.process_ok),
+                    Err(_) => increment!(server.process_err),
+                };
+
+                r.or_else(emit_continue("GELF processing failed"))
+            })
         }));
 
         // Spawn a background task to poll `stdio`
         let stdin_closed = if config.wait_on_stdin {
-            Either::A(stdin_closed()
-                .map(|_| Op::Shutdown))
+            Either::A(stdin_closed().map(|_| Op::Shutdown))
         } else {
             Either::B(future::empty())
-        }.into_stream();
+        }
+        .into_stream();
 
         // Listen for Ctrl + C and other termination signals
         // from the OS
@@ -92,6 +104,13 @@ pub fn build(
         // Accept and process incoming GELF messages over UDP
         // This stream should never return an `Err` variant
         let server = UdpFramed::new(sock, Decode(receive))
+            .then(|r| {
+                match r {
+                    Ok(_) => increment!(server.receive_ok),
+                    Err(_) => increment!(server.receive_err),
+                };
+                r
+            })
             .map(|(msg, _)| Op::Receive(Some(msg)))
             .or_else(emit_continue_with("GELF receive failed", receive_empty));
 

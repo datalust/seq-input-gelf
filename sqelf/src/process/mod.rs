@@ -6,12 +6,13 @@ use serde_json::Value;
 
 use self::str::{CachedString, Inlinable, Str};
 
-use crate::{
-    error::Error,
-    io::MemRead,
-};
+use crate::{error::Error, io::MemRead};
 
 use std::collections::HashMap;
+
+metrics! {
+    msg
+}
 
 /**
 Configuration for CELF formatting.
@@ -48,6 +49,8 @@ impl Process {
         msg: impl MemRead,
         with: impl FnOnce(clef::Message) -> Result<(), Error>,
     ) -> Result<(), Error> {
+        increment!(process.msg);
+
         if let Some(bytes) = msg.bytes() {
             let value: gelf::Message<Str> = serde_json::from_slice(bytes)?;
 
