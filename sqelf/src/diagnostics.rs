@@ -68,8 +68,10 @@ pub(crate) fn init(config: Config) -> Diagnostics {
 
     // Only set up metrics if the minimum level is Debug
     let metrics = if MIN_LEVEL.includes(Level::Debug) {
+        // NOTE: Diagnostics use a regular thread instead of `tokio`
+        // So that we can monitor metrics independently of the `tokio`
+        // runtime.
         let (tx, rx) = mpsc::channel();
-
         let metrics_timeout = Duration::from_millis(config.metrics_interval_ms);
         let handle = thread::spawn(move || loop {
             match rx.recv_timeout(metrics_timeout) {
@@ -213,15 +215,15 @@ pub fn emit_metrics() {
 }
 
 /// For use with `map_err`
-pub(crate) fn emit_abort<TInner>(message_template: &'static str) -> impl Fn(TInner) -> ()
+pub(crate) fn emit_err_abort<TInner>(message_template: &'static str) -> impl Fn(TInner) -> ()
 where
     TInner: Display,
 {
-    emit_abort_with(message_template, || ())
+    emit_err_abort_with(message_template, || ())
 }
 
 /// For use with `map_err`
-pub(crate) fn emit_abort_with<TInner, TError>(
+pub(crate) fn emit_err_abort_with<TInner, TError>(
     message_template: &'static str,
     err: impl Fn() -> TError,
 ) -> impl Fn(TInner) -> TError
@@ -236,17 +238,17 @@ where
 }
 
 /// For use with `or_else`
-pub(crate) fn emit_continue<TInner, TOuter>(
+pub(crate) fn emit_err_continue<TInner, TOuter>(
     message_template: &'static str,
 ) -> impl Fn(TInner) -> Result<(), TOuter>
 where
     TInner: Display,
 {
-    emit_continue_with(message_template, || ())
+    emit_err_continue_with(message_template, || ())
 }
 
 /// For use with `or_else`
-pub(crate) fn emit_continue_with<TInner, TOk, TOuter>(
+pub(crate) fn emit_err_continue_with<TInner, TOk, TOuter>(
     message_template: &'static str,
     ok: impl Fn() -> TOk,
 ) -> impl Fn(TInner) -> Result<TOk, TOuter>
