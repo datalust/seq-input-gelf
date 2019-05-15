@@ -5,19 +5,18 @@ extern crate serde_derive;
 mod diagnostics;
 
 #[macro_use]
-pub mod error;
+mod error;
 
+mod config;
 pub mod io;
 pub mod process;
 pub mod receive;
 pub mod server;
 
-mod config;
-
-pub use self::config::Config;
 use self::{
+    config::Config,
     diagnostics::{emit, emit_err},
-    error::{err_msg, Error},
+    error::Error,
 };
 
 use std::panic::catch_unwind;
@@ -27,8 +26,6 @@ fn run() -> Result<(), error::StdError> {
 
     // Initialize diagnostics
     let mut diagnostics = diagnostics::init(config.diagnostics);
-
-    emit("Starting GELF server");
 
     // The receiver for GELF messages
     let receive = {
@@ -43,18 +40,17 @@ fn run() -> Result<(), error::StdError> {
     };
 
     // The server that drives the receiver and processor
-    let server = server::build(config.server, receive, process)?;
+    let (server, handle) = server::build(config.server, receive, process)?;
+
+    if handle.is_some() {
+        bail!("In-process handles aren't supported when running as a standalone server");
+    }
 
     // Run the server and wait for it to exit
-    let run_server = match tokio::runtime::current_thread::block_on_all(server) {
-        Ok(()) | Err(server::Exit::Clean) => Ok(()),
-        _ => Err(err_msg("Server execution failed").into()),
-    };
+    server.run()?;
+    diagnostics.stop_metrics()?;
 
-    // Stop diagnostics
-    let stop_diagnostics = diagnostics.stop_metrics().map_err(Into::into);
-
-    run_server.and(stop_diagnostics)
+    Ok(())
 }
 
 fn main() {

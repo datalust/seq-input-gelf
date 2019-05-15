@@ -4,13 +4,22 @@ use tokio::{
     codec::Decoder,
     net::udp::{UdpFramed, UdpSocket},
     prelude::*,
+    runtime::Runtime,
 };
 
 use bytes::{Bytes, BytesMut};
 
-use futures::{future::lazy, future::Either, sync::mpsc};
+use futures::{
+    future::lazy,
+    future::Either,
+    sync::{mpsc, oneshot},
+};
 
-use crate::{diagnostics::*, error::Error, receive::Message};
+use crate::{
+    diagnostics::*,
+    error::{err_msg, Error},
+    receive::Message,
+};
 
 metrics! {
     receive_ok,
@@ -44,6 +53,11 @@ pub struct Config {
     to receive Ctrl+C, that the process should exit.
     */
     pub wait_on_stdin: bool,
+    /**
+    Whether or not to set up a handle that can be used to control the server
+    within the same process.
+    */
+    pub bind_handle: bool,
 }
 
 impl Default for Config {
@@ -52,30 +66,78 @@ impl Default for Config {
             bind: "0.0.0.0:12201".to_owned(),
             unprocessed_capacity: 1024,
             wait_on_stdin: false,
+            bind_handle: false,
         }
     }
 }
 
 /**
+A GELF server.
+*/
+pub struct Server(Box<dyn Future<Item = (), Error = Exit> + Send>);
+
+impl Server {
+    pub fn run(self) -> Result<(), Error> {
+        let mut runtime = Runtime::new().expect("failed to start new Runtime");
+
+        match runtime.block_on(self.0) {
+            Ok(()) | Err(Exit::Clean) => Ok(()),
+            _ => Err(err_msg("Server execution failed").into()),
+        }
+    }
+}
+
+/**
+A handle to a running GELF server that can be used to interact with it
+programmatically.
+*/
+pub struct Handle {
+    close: oneshot::Sender<()>,
+}
+
+impl Handle {
+    /**
+    Close the server.
+    */
+    pub fn close(self) -> bool {
+        self.close.send(()).is_ok()
+    }
+}
+
+/**
 Build a server to receive GELF messages and process them.
+
+If `config.bind_handle` is `true`, then this function will return a handle
+that can be used to interact with the running server programmatically.
 */
 pub fn build(
     config: Config,
     receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static,
-    mut handle: impl FnMut(Message) -> Result<(), Error> + Send + Sync + 'static,
-) -> Result<impl Future<Item = (), Error = Exit>, Error> {
+    mut process: impl FnMut(Message) -> Result<(), Error> + Send + Sync + 'static,
+) -> Result<(Server, Option<Handle>), Error> {
+    emit("Starting GELF server");
+
     let addr = config.bind.parse()?;
     let sock = UdpSocket::bind(&addr)?;
-    let (tx, rx) = mpsc::channel(config.unprocessed_capacity);
+
+    let (process_tx, process_rx) = mpsc::channel(config.unprocessed_capacity);
+    let (handle_tx, handle_rx) = oneshot::channel();
+
+    // Build a handle
+    let handle = if config.bind_handle {
+        Some(Handle { close: handle_tx })
+    } else {
+        None
+    };
 
     // Attempt to bind shutdown signals
     let ctrl_c =
         tokio_signal::ctrl_c().map_err(emit_err_abort_with("Server setup failed", exit_failure));
 
-    Ok(ctrl_c.and_then(move |ctrl_c| {
+    let server = ctrl_c.and_then(move |ctrl_c| {
         // Spawn a background task to process GELF payloads
         let process = tokio::spawn(lazy(move || {
-            rx.for_each(move |msg| match handle(msg) {
+            process_rx.for_each(move |msg| match process(msg) {
                 Ok(()) => {
                     increment!(server.process_ok);
 
@@ -90,9 +152,17 @@ pub fn build(
             })
         }));
 
-        // Spawn a background task to poll `stdio`
+        // Maybe listen for `stdin` closing
         let stdin_closed = if config.wait_on_stdin {
             Either::A(stdin_closed().map(|_| Op::Shutdown))
+        } else {
+            Either::B(future::empty())
+        }
+        .into_stream();
+
+        // Maybe listen for a programmatic handle closing
+        let handle_closed = if config.bind_handle {
+            Either::A(handle_rx.then(|_| Ok(Op::Shutdown)))
         } else {
             Either::B(future::empty())
         }
@@ -104,8 +174,7 @@ pub fn build(
             .map(|_| Op::Shutdown)
             .map_err(emit_err_abort("Server shutdown was unclean"));
 
-        // Trigger shutdown on Ctrl + C or when stdin is closed
-        let shutdown = ctrl_c.select(stdin_closed);
+        let shutdown = ctrl_c.select(stdin_closed).select(handle_closed);
 
         // Accept and process incoming GELF messages over UDP
         // This stream should never return an `Err` variant
@@ -148,7 +217,8 @@ pub fn build(
         // the works here waiting for it.
         server
             .for_each(move |msg| {
-                tx.clone()
+                process_tx
+                    .clone()
                     .send(msg)
                     .map(|_| ())
                     .or_else(emit_err_continue("GELF buffering failed"))
@@ -172,7 +242,9 @@ pub fn build(
                 Ok(()) => Err(Exit::Clean),
                 Err(()) => Err(Exit::Failure),
             })
-    }))
+    });
+
+    Ok((Server(Box::new(server)), handle))
 }
 
 /**

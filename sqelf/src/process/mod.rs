@@ -1,6 +1,6 @@
-mod clef;
+pub mod clef;
 mod gelf;
-mod str;
+pub mod str;
 
 use serde_json::Value;
 
@@ -44,7 +44,7 @@ impl Process {
         Process {}
     }
 
-    fn with_clef(
+    pub fn with_clef(
         &self,
         msg: impl MemRead,
         with: impl FnOnce(clef::Message) -> Result<(), Error>,
@@ -63,7 +63,7 @@ impl Process {
         }
     }
 
-    pub fn read_as_clef(&self, msg: impl MemRead) -> Result<(), Error> {
+    pub(crate) fn read_as_clef(&self, msg: impl MemRead) -> Result<(), Error> {
         self.with_clef(msg, |clef| {
             if let Ok(clef) = serde_json::to_string(&clef) {
                 println!("{}", clef);
