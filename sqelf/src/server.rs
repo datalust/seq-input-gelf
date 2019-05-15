@@ -1,8 +1,9 @@
-use std::thread;
+use std::{
+    net::SocketAddr,
+    thread,
+};
 
 use tokio::{
-    codec::Decoder,
-    net::udp::{UdpFramed, UdpSocket},
     prelude::*,
     runtime::Runtime,
 };
@@ -78,12 +79,24 @@ pub struct Server(Box<dyn Future<Item = (), Error = Exit> + Send>);
 
 impl Server {
     pub fn run(self) -> Result<(), Error> {
+        // Run the server on a fresh runtime
+        // We attempt to shut this runtime down cleanly to release
+        // any used resources
         let mut runtime = Runtime::new().expect("failed to start new Runtime");
 
-        match runtime.block_on(self.0) {
-            Ok(()) | Err(Exit::Clean) => Ok(()),
-            _ => Err(err_msg("Server execution failed").into()),
-        }
+        let run_server = {
+            match runtime.block_on(self.0) {
+                Ok(()) | Err(Exit::Clean) => Ok(()),
+                _ => Err(err_msg("Server execution failed").into()),
+            }
+        };
+
+        let close_runtime = runtime
+            .shutdown_now()
+            .wait()
+            .map_err(|_| err_msg("Runtime shutdown failed"));
+
+        run_server.and(close_runtime)
     }
 }
 
@@ -118,7 +131,7 @@ pub fn build(
     emit("Starting GELF server");
 
     let addr = config.bind.parse()?;
-    let sock = UdpSocket::bind(&addr)?;
+    let sock = ServerSocket::bind(&addr)?;
 
     let (process_tx, process_rx) = mpsc::channel(config.unprocessed_capacity);
     let (handle_tx, handle_rx) = oneshot::channel();
@@ -174,12 +187,14 @@ pub fn build(
             .map(|_| Op::Shutdown)
             .map_err(emit_err_abort("Server shutdown was unclean"));
 
-        let shutdown = ctrl_c.select(stdin_closed).select(handle_closed);
+        let shutdown = ctrl_c
+            .select(stdin_closed)
+            .select(handle_closed);
 
         // Accept and process incoming GELF messages over UDP
         // This stream should never return an `Err` variant
-        let receive = UdpFramed::new(sock, Decode(receive)).then(|r| match r {
-            Ok((msg, _)) => {
+        let receive = sock.build(receive).then(|r| match r {
+            Ok(msg) => {
                 increment!(server.receive_ok);
 
                 Ok(Op::Receive(Some(msg)))
@@ -265,28 +280,6 @@ fn exit_failure() -> Exit {
     Exit::Failure
 }
 
-struct Decode<F>(F);
-
-impl<F> Decoder for Decode<F>
-where
-    F: FnMut(Bytes) -> Result<Option<Message>, Error>,
-{
-    type Item = Message;
-    type Error = Error;
-
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let src = src.take().freeze();
-
-        (self.0)(src)
-    }
-}
-
-impl<F> Drop for Decode<F> {
-    fn drop(&mut self) {
-        emit("Dropping the UDP decoder");
-    }
-}
-
 #[derive(Debug, PartialEq, Eq)]
 enum Op {
     Receive(Option<Message>),
@@ -316,3 +309,44 @@ fn stdin_closed() -> impl Future<Item = (), Error = ()> {
 
     rx.into_future().map(|_| ()).map_err(|_| ())
 }
+
+mod imp {
+    use super::*;
+
+    use tokio::{
+        codec::Decoder,
+        net::udp::{UdpFramed, UdpSocket},
+    };
+
+    pub(super) struct ServerSocket(UdpSocket);
+
+    impl ServerSocket {
+        pub(super) fn bind(addr: &SocketAddr) -> Result<Self, Error> {
+            let sock = UdpSocket::bind(&addr)?;
+            
+            Ok(ServerSocket(sock))
+        }
+
+        pub(super) fn build(self, receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static) -> impl Stream<Item = Message, Error = Error> {
+            UdpFramed::new(self.0, Decode(receive)).map(|(msg, _)| msg)
+        }
+    }
+
+    struct Decode<F>(F);
+
+    impl<F> Decoder for Decode<F>
+    where
+        F: FnMut(Bytes) -> Result<Option<Message>, Error>,
+    {
+        type Item = Message;
+        type Error = Error;
+
+        fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+            let src = src.take().freeze();
+
+            (self.0)(src)
+        }
+    }
+}
+
+use self::imp::*;
