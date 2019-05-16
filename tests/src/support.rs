@@ -79,6 +79,23 @@ pub fn expect(to_receive: ToReceive, check: impl Fn(&[Value])) {
     check(&received);
 }
 
+pub(crate) fn test_child(name: &str) {
+    use std::{
+        env,
+        process::{Command, Stdio},
+    };
+
+    let self_bin = env::args().next().expect("missing self command");
+
+    let mut test = Command::new(self_bin)
+        .arg(name)
+        .stdout(Stdio::inherit())
+        .spawn()
+        .expect("failed to start child process");
+
+    test.wait().expect("test execution failed");
+}
+
 macro_rules! dgrams {
     ($(..$dgrams:expr),+) => {{
         let mut v = Vec::new();
@@ -103,8 +120,18 @@ macro_rules! cases {
 
         pub(crate) fn test_all() {
             $(
-                println!("running {}...", stringify!($case));
-                self::$case::test();
+                $crate::support::test_child(stringify!($case));
+            )+
+        }
+
+        pub(crate) fn test(name: impl AsRef<str>) {
+            let name = name.as_ref();
+
+            $(
+                if name == stringify!($case) {
+                    println!("running {}...", stringify!($case));
+                    self::$case::test();
+                }
             )+
         }
     }
