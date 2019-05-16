@@ -16,10 +16,10 @@ pub mod server;
 use self::{
     config::Config,
     diagnostics::{emit, emit_err},
-    error::Error,
+    error::{err_msg, Error},
 };
 
-use std::panic::catch_unwind;
+use std::{io::Read, panic::catch_unwind, thread};
 
 fn run() -> Result<(), error::StdError> {
     let config = Config::from_env()?;
@@ -40,10 +40,15 @@ fn run() -> Result<(), error::StdError> {
     };
 
     // The server that drives the receiver and processor
-    let (server, handle) = server::build(config.server, receive, process)?;
+    let mut server = server::build(config.server, receive, process)?;
 
-    if handle.is_some() {
-        bail!("In-process handles aren't supported when running as a standalone server");
+    // If we should listen for stdin to terminate
+    if config.wait_on_stdin {
+        let handle = server
+            .take_handle()
+            .ok_or_else(|| err_msg("Failed to acquire handle to server"))?;
+
+        listen_for_stdin_closed(handle);
     }
 
     // Run the server and wait for it to exit
@@ -51,6 +56,27 @@ fn run() -> Result<(), error::StdError> {
     diagnostics.stop_metrics()?;
 
     Ok(())
+}
+
+fn listen_for_stdin_closed(handle: server::Handle) {
+    // NOTE: This is a regular thread instead of `tokio`
+    // so that we don't block with our synchronous read that
+    // will probably never actually return
+    thread::spawn(move || 'wait: loop {
+        match std::io::stdin().read(&mut [u8::default()]) {
+            Ok(0) => {
+                let _ = handle.close();
+                break 'wait;
+            }
+            Ok(_) => {
+                continue 'wait;
+            }
+            Err(_) => {
+                let _ = handle.close();
+                break 'wait;
+            }
+        }
+    });
 }
 
 fn main() {

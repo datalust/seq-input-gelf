@@ -8,6 +8,7 @@ pub struct Config {
     pub process: process::Config,
     pub server: server::Config,
     pub diagnostics: diagnostics::Config,
+    pub wait_on_stdin: bool,
 }
 
 impl Config {
@@ -15,7 +16,7 @@ impl Config {
         let mut config = Config::default();
 
         let is_seq_app = is_seq_app();
-        config.server.wait_on_stdin = is_seq_app;
+        config.wait_on_stdin = is_seq_app;
 
         let bind_address_var = if is_seq_app {
             "SEQ_APP_SETTING_GELFADDRESS"

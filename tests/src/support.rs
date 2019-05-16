@@ -23,11 +23,9 @@ pub fn expect(to_receive: ToReceive, check: impl Fn(&[Value])) {
     let (tx, rx) = crossbeam_channel::unbounded();
 
     // Build a server
-    let (server, handle) = server::build(
+    let mut server = server::build(
         server::Config {
             bind: "0.0.0.0:12202".into(),
-            bind_handle: true,
-            wait_on_stdin: false,
             ..Default::default()
         },
         {
@@ -54,7 +52,7 @@ pub fn expect(to_receive: ToReceive, check: impl Fn(&[Value])) {
     )
     .expect("failed to build server");
 
-    let handle = handle.expect("no server handle");
+    let handle = server.take_handle().expect("no server handle");
     let server = thread::spawn(move || server.run().expect("failed to run server"));
 
     // Send our datagrams
