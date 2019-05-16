@@ -99,9 +99,6 @@ impl Handle {
 
 /**
 Build a server to receive GELF messages and process them.
-
-If `config.bind_handle` is `true`, then this function will return a handle
-that can be used to interact with the running server programmatically.
 */
 pub fn build(
     config: Config,
