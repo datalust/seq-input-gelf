@@ -43,7 +43,7 @@ fn run() -> Result<(), error::StdError> {
     let mut server = server::build(config.server, receive, process)?;
 
     // If we should listen for stdin to terminate
-    if config.wait_on_stdin {
+    if config::is_seq_app() {
         let handle = server
             .take_handle()
             .ok_or_else(|| err_msg("Failed to acquire handle to server"))?;

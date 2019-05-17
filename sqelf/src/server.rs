@@ -137,7 +137,7 @@ pub fn build(
             })
         }));
 
-        // Maybe listen for a programmatic handle closing
+        // Listen for a programmatic handle closing
         let handle_closed = handle_rx.then(|_| Ok(Op::Shutdown)).into_stream();
 
         // Listen for Ctrl + C and other termination signals
