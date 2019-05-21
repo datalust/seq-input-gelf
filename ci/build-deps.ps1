@@ -67,13 +67,14 @@ function Invoke-LinuxBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    Run-Command -Exe cargo -ArgumentList 'build', '--release', '--target x86_64-unknown-linux-musl'
+    Run-Command -Exe cargo -ArgumentList 'build', '--bin sqelf', '--release', '--target x86_64-unknown-linux-musl'
 }
 function Invoke-LinuxTests
 {
     Write-BeginStep $MYINVOCATION
 
     Run-Command -Exe cargo -ArgumentList 'test', '--target x86_64-unknown-linux-musl'
+    Run-Command -Exe cargo -ArgumentList 'run', '-p sqelf_tests', '--target x86_64-unknown-linux-musl'
 }
 
 function Invoke-DockerBuild
@@ -88,13 +89,14 @@ function Invoke-WindowsBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    Run-Command -Exe cargo -ArgumentList 'build', '--release', '--target x86_64-pc-windows-msvc'
+    Run-Command -Exe cargo -ArgumentList 'build', '--bin sqelf', '--release', '--target x86_64-pc-windows-msvc'
 }
 function Invoke-WindowsTests
 {
     Write-BeginStep $MYINVOCATION
 
     Run-Command -Exe cargo -ArgumentList 'test', '--target x86_64-pc-windows-msvc'
+    Run-Command -Exe cargo -ArgumentList 'run', '-p sqelf_tests', '--target x86_64-pc-windows-msvc'
 }
 
 function Invoke-NuGetPack($version)

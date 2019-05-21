@@ -12,14 +12,14 @@ use serde::{
 
 use inlinable_string::{InlineString, INLINE_STRING_CAPACITY};
 
-pub(super) use string_cache::DefaultAtom as CachedString;
+pub use string_cache::DefaultAtom as CachedString;
 
 /**
 A specialized `Cow<'a, str>` that can be deserialized using
 borrowed data.
 */
 #[derive(Debug)]
-pub(super) enum Str<'a, S = String> {
+pub enum Str<'a, S = String> {
     Borrowed(&'a str),
     Owned(S),
 }

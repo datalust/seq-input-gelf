@@ -5,30 +5,27 @@ extern crate serde_derive;
 mod diagnostics;
 
 #[macro_use]
-pub mod error;
+mod error;
 
+mod config;
 pub mod io;
 pub mod process;
 pub mod receive;
 pub mod server;
 
-mod config;
-
-pub use self::config::Config;
 use self::{
+    config::Config,
     diagnostics::{emit, emit_err},
     error::{err_msg, Error},
 };
 
-use std::panic::catch_unwind;
+use std::{io::Read, panic::catch_unwind, thread};
 
 fn run() -> Result<(), error::StdError> {
     let config = Config::from_env()?;
 
     // Initialize diagnostics
     let mut diagnostics = diagnostics::init(config.diagnostics);
-
-    emit("Starting GELF server");
 
     // The receiver for GELF messages
     let receive = {
@@ -43,18 +40,43 @@ fn run() -> Result<(), error::StdError> {
     };
 
     // The server that drives the receiver and processor
-    let server = server::build(config.server, receive, process)?;
+    let mut server = server::build(config.server, receive, process)?;
+
+    // If we should listen for stdin to terminate
+    if config::is_seq_app() {
+        let handle = server
+            .take_handle()
+            .ok_or_else(|| err_msg("Failed to acquire handle to server"))?;
+
+        listen_for_stdin_closed(handle);
+    }
 
     // Run the server and wait for it to exit
-    let run_server = match tokio::runtime::current_thread::block_on_all(server) {
-        Ok(()) | Err(server::Exit::Clean) => Ok(()),
-        _ => Err(err_msg("Server execution failed").into()),
-    };
+    server.run()?;
+    diagnostics.stop_metrics()?;
 
-    // Stop diagnostics
-    let stop_diagnostics = diagnostics.stop_metrics().map_err(Into::into);
+    Ok(())
+}
 
-    run_server.and(stop_diagnostics)
+fn listen_for_stdin_closed(handle: server::Handle) {
+    // NOTE: This is a regular thread instead of `tokio`
+    // so that we don't block with our synchronous read that
+    // will probably never actually return
+    thread::spawn(move || 'wait: loop {
+        match std::io::stdin().read(&mut [u8::default()]) {
+            Ok(0) => {
+                let _ = handle.close();
+                break 'wait;
+            }
+            Ok(_) => {
+                continue 'wait;
+            }
+            Err(_) => {
+                let _ = handle.close();
+                break 'wait;
+            }
+        }
+    });
 }
 
 fn main() {

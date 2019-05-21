@@ -1,0 +1,4 @@
+cases! {
+    empty,
+    simple
+}

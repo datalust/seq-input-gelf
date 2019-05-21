@@ -1,16 +1,19 @@
-use std::thread;
+use std::net::SocketAddr;
 
-use tokio::{
-    codec::Decoder,
-    net::udp::{UdpFramed, UdpSocket},
-    prelude::*,
-};
+use tokio::{prelude::*, runtime::Runtime};
 
 use bytes::{Bytes, BytesMut};
 
-use futures::{future::lazy, future::Either, sync::mpsc};
+use futures::{
+    future::lazy,
+    sync::{mpsc, oneshot},
+};
 
-use crate::{diagnostics::*, error::Error, receive::Message};
+use crate::{
+    diagnostics::*,
+    error::{err_msg, Error},
+    receive::Message,
+};
 
 metrics! {
     receive_ok,
@@ -34,16 +37,6 @@ pub struct Config {
     If this value is reached then incoming messages will be dropped.
     */
     pub unprocessed_capacity: usize,
-
-    /**
-    Whether or not the server should wait on (and terminate on the completion of)
-    the process's standard input.
-
-    This is used by Seq on Windows to signal to a
-    background process - which has no window to receive WM_CLOSE, and no console
-    to receive Ctrl+C, that the process should exit.
-    */
-    pub wait_on_stdin: bool,
 }
 
 impl Default for Config {
@@ -51,8 +44,56 @@ impl Default for Config {
         Config {
             bind: "0.0.0.0:12201".to_owned(),
             unprocessed_capacity: 1024,
-            wait_on_stdin: false,
         }
+    }
+}
+
+/**
+A GELF server.
+*/
+pub struct Server {
+    fut: Box<dyn Future<Item = (), Error = ()> + Send>,
+    handle: Option<Handle>,
+}
+
+impl Server {
+    pub fn take_handle(&mut self) -> Option<Handle> {
+        self.handle.take()
+    }
+
+    pub fn run(self) -> Result<(), Error> {
+        // Run the server on a fresh runtime
+        // We attempt to shut this runtime down cleanly to release
+        // any used resources
+        let mut runtime = Runtime::new().expect("failed to start new Runtime");
+
+        runtime
+            .block_on(self.fut)
+            .map_err(|_| err_msg("Server execution failed"))?;
+
+        runtime
+            .shutdown_now()
+            .wait()
+            .map_err(|_| err_msg("Runtime shutdown failed"))?;
+
+        Ok(())
+    }
+}
+
+/**
+A handle to a running GELF server that can be used to interact with it
+programmatically.
+*/
+pub struct Handle {
+    close: oneshot::Sender<()>,
+}
+
+impl Handle {
+    /**
+    Close the server.
+    */
+    pub fn close(self) -> bool {
+        self.close.send(()).is_ok()
     }
 }
 
@@ -62,20 +103,26 @@ Build a server to receive GELF messages and process them.
 pub fn build(
     config: Config,
     receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static,
-    mut handle: impl FnMut(Message) -> Result<(), Error> + Send + Sync + 'static,
-) -> Result<impl Future<Item = (), Error = Exit>, Error> {
+    mut process: impl FnMut(Message) -> Result<(), Error> + Send + Sync + 'static,
+) -> Result<Server, Error> {
+    emit("Starting GELF server");
+
     let addr = config.bind.parse()?;
-    let sock = UdpSocket::bind(&addr)?;
-    let (tx, rx) = mpsc::channel(config.unprocessed_capacity);
+    let sock = ServerSocket::bind(&addr)?;
+
+    let (process_tx, process_rx) = mpsc::channel(config.unprocessed_capacity);
+    let (handle_tx, handle_rx) = oneshot::channel();
+
+    // Build a handle
+    let handle = Some(Handle { close: handle_tx });
 
     // Attempt to bind shutdown signals
-    let ctrl_c =
-        tokio_signal::ctrl_c().map_err(emit_err_abort_with("Server setup failed", exit_failure));
+    let ctrl_c = tokio_signal::ctrl_c().map_err(emit_err_abort("Server setup failed"));
 
-    Ok(ctrl_c.and_then(move |ctrl_c| {
+    let server = ctrl_c.and_then(move |ctrl_c| {
         // Spawn a background task to process GELF payloads
         let process = tokio::spawn(lazy(move || {
-            rx.for_each(move |msg| match handle(msg) {
+            process_rx.for_each(move |msg| match process(msg) {
                 Ok(()) => {
                     increment!(server.process_ok);
 
@@ -90,13 +137,8 @@ pub fn build(
             })
         }));
 
-        // Spawn a background task to poll `stdio`
-        let stdin_closed = if config.wait_on_stdin {
-            Either::A(stdin_closed().map(|_| Op::Shutdown))
-        } else {
-            Either::B(future::empty())
-        }
-        .into_stream();
+        // Listen for a programmatic handle closing
+        let handle_closed = handle_rx.then(|_| Ok(Op::Shutdown)).into_stream();
 
         // Listen for Ctrl + C and other termination signals
         // from the OS
@@ -104,13 +146,12 @@ pub fn build(
             .map(|_| Op::Shutdown)
             .map_err(emit_err_abort("Server shutdown was unclean"));
 
-        // Trigger shutdown on Ctrl + C or when stdin is closed
-        let shutdown = ctrl_c.select(stdin_closed);
+        let shutdown = ctrl_c.select(handle_closed);
 
         // Accept and process incoming GELF messages over UDP
         // This stream should never return an `Err` variant
-        let receive = UdpFramed::new(sock, Decode(receive)).then(|r| match r {
-            Ok((msg, _)) => {
+        let receive = sock.build(receive).then(|r| match r {
+            Ok(msg) => {
                 increment!(server.receive_ok);
 
                 Ok(Op::Receive(Some(msg)))
@@ -148,7 +189,8 @@ pub fn build(
         // the works here waiting for it.
         server
             .for_each(move |msg| {
-                tx.clone()
+                process_tx
+                    .clone()
                     .send(msg)
                     .map(|_| ())
                     .or_else(emit_err_continue("GELF buffering failed"))
@@ -164,55 +206,12 @@ pub fn build(
 
                 process
             })
-            // Forces the runtime to shutdown
-            // This is a bit of a hack that prevents
-            // `tokio` from waiting on any remaining futures
-            // since we're terminating the process
-            .then(|r| match r {
-                Ok(()) => Err(Exit::Clean),
-                Err(()) => Err(Exit::Failure),
-            })
-    }))
-}
+    });
 
-/**
-The outcome of shutting down the server.
-*/
-pub enum Exit {
-    /**
-    The server was terminated, but was done so cleanly.
-    */
-    Clean,
-    /**
-    The server was terminated, but due to an internal error.
-    */
-    Failure,
-}
-
-fn exit_failure() -> Exit {
-    Exit::Failure
-}
-
-struct Decode<F>(F);
-
-impl<F> Decoder for Decode<F>
-where
-    F: FnMut(Bytes) -> Result<Option<Message>, Error>,
-{
-    type Item = Message;
-    type Error = Error;
-
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let src = src.take().freeze();
-
-        (self.0)(src)
-    }
-}
-
-impl<F> Drop for Decode<F> {
-    fn drop(&mut self) {
-        emit("Dropping the UDP decoder");
-    }
+    Ok(Server {
+        fut: Box::new(server),
+        handle,
+    })
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -221,26 +220,46 @@ enum Op {
     Shutdown,
 }
 
-fn stdin_closed() -> impl Future<Item = (), Error = ()> {
-    // NOTE: This is a regular thread instead of `tokio`
-    // so that we don't block with our synchronous read that
-    // will probably never actually return
-    let (tx, rx) = mpsc::channel(1);
-    thread::spawn(move || 'wait: loop {
-        match std::io::stdin().read(&mut [u8::default()]) {
-            Ok(0) => {
-                let _ = tx.send(()).wait();
-                break 'wait;
-            }
-            Ok(_) => {
-                continue 'wait;
-            }
-            Err(_) => {
-                let _ = tx.send(()).wait();
-                break 'wait;
-            }
-        }
-    });
+mod imp {
+    use super::*;
 
-    rx.into_future().map(|_| ()).map_err(|_| ())
+    use tokio::{
+        codec::Decoder,
+        net::udp::{UdpFramed, UdpSocket},
+    };
+
+    pub(super) struct ServerSocket(UdpSocket);
+
+    impl ServerSocket {
+        pub(super) fn bind(addr: &SocketAddr) -> Result<Self, Error> {
+            let sock = UdpSocket::bind(&addr)?;
+
+            Ok(ServerSocket(sock))
+        }
+
+        pub(super) fn build(
+            self,
+            receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static,
+        ) -> impl Stream<Item = Message, Error = Error> {
+            UdpFramed::new(self.0, Decode(receive)).map(|(msg, _)| msg)
+        }
+    }
+
+    struct Decode<F>(F);
+
+    impl<F> Decoder for Decode<F>
+    where
+        F: FnMut(Bytes) -> Result<Option<Message>, Error>,
+    {
+        type Item = Message;
+        type Error = Error;
+
+        fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+            let src = src.take().freeze();
+
+            (self.0)(src)
+        }
+    }
 }
+
+use self::imp::*;

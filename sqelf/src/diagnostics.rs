@@ -303,6 +303,7 @@ macro_rules! increment {
 
 macro_rules! metrics {
     ($($metric:ident),*) => {
+        #[allow(dead_code)]
         pub(crate) struct Metrics {
             $(
                 pub(crate) $metric: std::sync::atomic::AtomicUsize,
@@ -311,6 +312,7 @@ macro_rules! metrics {
         }
 
         impl Metrics {
+            #[allow(dead_code)]
             pub(crate) const fn new() -> Self {
                 Metrics {
                     $(
@@ -320,6 +322,7 @@ macro_rules! metrics {
                 }
             }
 
+            #[allow(dead_code)]
             pub(crate) fn take(&self) -> impl AsRef<[(&'static str, usize)]> {
                 let fields = [
                     $(

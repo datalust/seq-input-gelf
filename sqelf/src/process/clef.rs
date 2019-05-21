@@ -14,39 +14,39 @@ use serde_json::Value;
 use super::str::Str;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(super) struct Message<'a> {
+pub struct Message<'a> {
     #[serde(rename = "@t")]
-    pub(super) timestamp: Option<Timestamp>,
+    pub timestamp: Option<Timestamp>,
 
     #[serde(rename = "@l")]
     #[serde(borrow)]
-    pub(super) level: Option<Str<'a>>,
+    pub level: Option<Str<'a>>,
 
     #[serde(rename = "@m")]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(borrow)]
-    pub(super) message: Option<Str<'a>>,
+    pub message: Option<Str<'a>>,
 
     #[serde(rename = "@mt")]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(borrow)]
-    pub(super) message_template: Option<Str<'a>>,
+    pub message_template: Option<Str<'a>>,
 
     // This is mapped from `full_message`, which GELF suggests might contain a backtrace
     #[serde(rename = "@x")]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(borrow)]
-    pub(super) exception: Option<Str<'a>>,
+    pub exception: Option<Str<'a>>,
 
     // @i and @r are currently not implemented
 
     // Everything else
     #[serde(flatten)]
-    pub(super) additional: HashMap<Str<'a>, Value>,
+    pub additional: HashMap<Str<'a>, Value>,
 }
 
 #[derive(Debug)]
-pub(super) struct Timestamp(SystemTime);
+pub struct Timestamp(SystemTime);
 
 impl Timestamp {
     pub(super) fn now() -> Self {
