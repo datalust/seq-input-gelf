@@ -1,4 +1,9 @@
-use std::{net::UdpSocket, thread, time::Duration};
+use std::{
+    io::Write,
+    net::{self, TcpStream, UdpSocket},
+    thread,
+    time::Duration,
+};
 
 use sqelf::{process, receive, server};
 
@@ -72,9 +77,18 @@ fn expect(protocol: server::Protocol, to_receive: ToReceive, check: impl Fn(&[Va
                 sock.send_to(&dgram, "127.0.0.1:12202")
                     .expect("failed to send datagram");
             }
-        },
+        }
         server::Protocol::Tcp => {
-            unimplemented!("send tcp chunks")
+            let mut stream =
+                TcpStream::connect("127.0.0.1:12202").expect("failed to bind client stream");
+
+            for chunk in when_sending {
+                stream.write(&chunk).expect("failed to send chunk");
+            }
+
+            stream
+                .shutdown(net::Shutdown::Both)
+                .expect("failed to close connection");
         }
     }
 
@@ -128,7 +142,9 @@ macro_rules! net_chunks {
     }}
 }
 
-pub(crate) fn tcp_delim() -> Vec<Vec<u8>> { vec![vec![b'\0']] }
+pub(crate) fn tcp_delim() -> Vec<Vec<u8>> {
+    vec![vec![b'\0']]
+}
 
 macro_rules! cases {
     ($($case:ident),+) => {

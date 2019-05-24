@@ -1,7 +1,4 @@
-use std::{
-    net::SocketAddr,
-    str::FromStr,
-};
+use std::{net::SocketAddr, str::FromStr};
 
 use tokio::{prelude::*, runtime::Runtime};
 
@@ -53,13 +50,13 @@ pub enum Protocol {
 }
 
 impl FromStr for Protocol {
-    type Err =  Error;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "udp" | "UDP" => Ok(Protocol::Udp),
             "tcp" | "TCP" => Ok(Protocol::Tcp),
-            _ => Err(err_msg("invalid protocol value (expected `udp` or `tcp)`"))
+            _ => Err(err_msg("invalid protocol value (expected `udp` or `tcp)`")),
         }
     }
 }
@@ -128,17 +125,18 @@ Build a server to receive GELF messages and process them.
 */
 pub fn build(
     config: Config,
-    receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static,
-    mut process: impl FnMut(Message) -> Result<(), Error> + Send + Sync + 'static,
+    receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static + Clone,
+    mut process: impl FnMut(Message) -> Result<(), Error> + Send + Sync + 'static + Clone,
 ) -> Result<Server, Error> {
     emit("Starting GELF server");
 
     let addr = config.bind.parse()?;
 
-    let sock = match config.protocol {
-        Protocol::Udp => udp::ServerSocket::bind(&addr)?,
-        Protocol::Tcp => unimplemented!("add TCP support"),
-    };
+    let incoming: Box<dyn Stream<Item = Message, Error = Error> + Send + Sync> =
+        match config.protocol {
+            Protocol::Udp => Box::new(udp::Server::bind(&addr)?.build(receive)),
+            Protocol::Tcp => Box::new(tcp::Server::bind(&addr)?.build(receive)),
+        };
 
     let (process_tx, process_rx) = mpsc::channel(config.unprocessed_capacity);
     let (handle_tx, handle_rx) = oneshot::channel();
@@ -180,7 +178,7 @@ pub fn build(
 
         // Accept and process incoming GELF messages over UDP
         // This stream should never return an `Err` variant
-        let receive = sock.build(receive).then(|r| match r {
+        let receive = incoming.then(|r| match r {
             Ok(msg) => {
                 increment!(server.receive_ok);
 
@@ -258,13 +256,13 @@ mod udp {
         net::udp::{UdpFramed, UdpSocket},
     };
 
-    pub(super) struct ServerSocket(UdpSocket);
+    pub(super) struct Server(UdpSocket);
 
-    impl ServerSocket {
+    impl Server {
         pub(super) fn bind(addr: &SocketAddr) -> Result<Self, Error> {
             let sock = UdpSocket::bind(&addr)?;
 
-            Ok(ServerSocket(sock))
+            Ok(Server(sock))
         }
 
         pub(super) fn build(
@@ -289,6 +287,90 @@ mod udp {
             let src = src.take().freeze();
 
             (self.0)(src)
+        }
+    }
+}
+
+mod tcp {
+    use super::*;
+
+    use tokio::{
+        codec::{Decoder, FramedRead},
+        net::tcp::TcpListener,
+    };
+
+    pub(super) struct Server(TcpListener);
+
+    impl Server {
+        pub(super) fn bind(addr: &SocketAddr) -> Result<Self, Error> {
+            let listener = TcpListener::bind(&addr)?;
+
+            Ok(Server(listener))
+        }
+
+        pub(super) fn build(
+            self,
+            receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static + Clone,
+        ) -> impl Stream<Item = Message, Error = Error> {
+            self.0
+                .incoming()
+                .map(move |conn| FramedRead::new(conn, Decode::new(receive.clone())))
+                .flatten()
+        }
+    }
+
+    pub struct Decode<F> {
+        next_index: usize,
+        receive: F,
+    }
+
+    impl<F> Decode<F> {
+        pub fn new(receive: F) -> Self {
+            Decode {
+                next_index: 0,
+                receive,
+            }
+        }
+    }
+
+    impl<F> Decoder for Decode<F>
+    where
+        F: FnMut(Bytes) -> Result<Option<Message>, Error>,
+    {
+        type Item = Message;
+        type Error = Error;
+
+        fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+            // Messages are separated by null bytes
+            let sep_offset = src[self.next_index..].iter().position(|b| *b == b'\0');
+
+            if let Some(offset) = sep_offset {
+                let sep_index = offset + self.next_index;
+                self.next_index = 0;
+                let src = src.split_to(sep_index + 1).freeze();
+
+                (self.receive)(src.slice_to(src.len() - 1))
+            } else {
+                self.next_index = src.len();
+
+                Ok(None)
+            }
+        }
+
+        fn decode_eof(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+            Ok(match self.decode(src)? {
+                Some(frame) => Some(frame),
+                None => {
+                    if src.is_empty() {
+                        None
+                    } else {
+                        let src = src.take().freeze();
+                        self.next_index = 0;
+
+                        (self.receive)(src)?
+                    }
+                }
+            })
         }
     }
 }

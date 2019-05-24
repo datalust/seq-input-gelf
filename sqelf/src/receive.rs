@@ -69,14 +69,14 @@ A message may be chunked and compressed.
 This decoder won't attempt to validate that the contents
 of the message itself conforms to the GELF specification.
 */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Gelf {
     config: Config,
     by_id: ById,
     by_arrival: ByArrival,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ById {
     chunks: HashMap<u64, (Chunks, UniqueTimestamp)>,
 }
@@ -89,7 +89,7 @@ impl ById {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ByArrival {
     counter: u64,
     chunks: BTreeMap<UniqueTimestamp, u64>,
@@ -259,12 +259,13 @@ impl Gelf {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Chunks {
     expected_total: u8,
     inner: BTreeMap<u8, Bytes>,
 }
 
+#[derive(Debug, Clone)]
 struct Chunk {
     seq: u8,
     bytes: Bytes,

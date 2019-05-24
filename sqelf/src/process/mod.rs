@@ -36,7 +36,7 @@ pub fn build(config: Config) -> Process {
 /**
 Process a raw message
 */
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Process {}
 
 impl Process {
