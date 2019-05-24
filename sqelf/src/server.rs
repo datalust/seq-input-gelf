@@ -1,4 +1,7 @@
-use std::net::SocketAddr;
+use std::{
+    net::SocketAddr,
+    str::FromStr,
+};
 
 use tokio::{prelude::*, runtime::Runtime};
 
@@ -28,9 +31,13 @@ Server configuration.
 #[derive(Debug, Clone)]
 pub struct Config {
     /**
-    The address to bind the UDP server to.
+    The address to bind the server to.
     */
     pub bind: String,
+    /**
+    The protocol to use.
+    */
+    pub protocol: Protocol,
     /**
     The maximum number of unprocessed messages.
 
@@ -39,10 +46,29 @@ pub struct Config {
     pub unprocessed_capacity: usize,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Protocol {
+    Udp,
+    Tcp,
+}
+
+impl FromStr for Protocol {
+    type Err =  Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "udp" | "UDP" => Ok(Protocol::Udp),
+            "tcp" | "TCP" => Ok(Protocol::Tcp),
+            _ => Err(err_msg("invalid protocol value (expected `udp` or `tcp)`"))
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
             bind: "0.0.0.0:12201".to_owned(),
+            protocol: Protocol::Udp,
             unprocessed_capacity: 1024,
         }
     }
@@ -108,7 +134,11 @@ pub fn build(
     emit("Starting GELF server");
 
     let addr = config.bind.parse()?;
-    let sock = ServerSocket::bind(&addr)?;
+
+    let sock = match config.protocol {
+        Protocol::Udp => udp::ServerSocket::bind(&addr)?,
+        Protocol::Tcp => unimplemented!("add TCP support"),
+    };
 
     let (process_tx, process_rx) = mpsc::channel(config.unprocessed_capacity);
     let (handle_tx, handle_rx) = oneshot::channel();
@@ -220,7 +250,7 @@ enum Op {
     Shutdown,
 }
 
-mod imp {
+mod udp {
     use super::*;
 
     use tokio::{
@@ -255,11 +285,10 @@ mod imp {
         type Error = Error;
 
         fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+            // All datagrams are considered a valid message
             let src = src.take().freeze();
 
             (self.0)(src)
         }
     }
 }
-
-use self::imp::*;

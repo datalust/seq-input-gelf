@@ -1,14 +1,15 @@
 use crate::support::*;
 
 pub fn test() {
-    expect(
+    tcp_expect(
         ToReceive {
             count: 1,
-            when_sending: dgrams![
-                ..dgrams!({
+            when_sending: net_chunks![
+                ..net_chunks!({
                     "host": "foo",
                     "short_message": "bar"
-                })
+                }),
+                ..tcp_delim()
             ],
         },
         |received| {
