@@ -22,13 +22,14 @@ impl Config {
         };
         read_environment(&mut config.server.bind, bind_address_var)?;
 
-        let protocol_var = if is_seq_app {
-            "SEQ_APP_SETTING_PROTOCOL"
+        if is_seq_app {
+            if is_truthy("SEQ_APP_SETTING_USETCP")? {
+                config.server.protocol = server::Protocol::Tcp;
+            }
         } else {
-            "GELF_PROTOCOL"
+            read_environment(&mut config.server.protocol, "GELF_PROTOCOL")?;
         };
-        read_environment(&mut config.server.protocol, protocol_var)?;
-
+        
         let enable_diagnostics = if is_seq_app {
             "SEQ_APP_SETTING_ENABLEDIAGNOSTICS"
         } else {

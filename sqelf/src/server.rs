@@ -269,6 +269,8 @@ mod udp {
             self,
             receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static,
         ) -> impl Stream<Item = Message, Error = Error> {
+            emit("Setting up for UDP");
+
             UdpFramed::new(self.0, Decode(receive)).map(|(msg, _)| msg)
         }
     }
@@ -294,6 +296,14 @@ mod udp {
 mod tcp {
     use super::*;
 
+    use futures::{
+        stream::{
+            StreamFuture,
+            Fuse,
+            futures_unordered::FuturesUnordered,
+        },
+    };
+
     use tokio::{
         codec::{Decoder, FramedRead},
         net::tcp::TcpListener,
@@ -312,12 +322,97 @@ mod tcp {
             self,
             receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static + Clone,
         ) -> impl Stream<Item = Message, Error = Error> {
+            emit("Setting up for TCP");
+
             self.0
                 .incoming()
                 .map(move |conn| FramedRead::new(conn, Decode::new(receive.clone())))
-                .flatten()
+                .listen(1024)
         }
     }
+
+    struct Listen<S>
+    where
+        S: Stream,
+        S::Item: Stream,
+        <S::Item as Stream>::Error: From<S::Error>,
+    {
+        stream: Fuse<S>,
+        connections: FuturesUnordered<StreamFuture<S::Item>>,
+        max: usize,
+    }
+
+    impl<S> Stream for Listen<S>
+    where
+        S: Stream,
+        S::Item: Stream,
+        <S::Item as Stream>::Error: From<S::Error>,
+    {
+        type Item = <S::Item as Stream>::Item;
+        type Error = <S::Item as Stream>::Error;
+
+        fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+            'poll_conns: loop {
+                // Fill up our accepted connections
+                'fill_conns: while self.connections.len() < self.max {
+                    let stream = match self.stream.poll()? {
+                        Async::Ready(Some(s)) => s.into_future(),
+                        Async::Ready(None) |
+                        Async::NotReady => break 'fill_conns,
+                    };
+
+                    self.connections.push(stream.into_future());
+                }
+
+                // Try polling the stream
+                match self.connections.poll() {
+                    // We have an item from a connection
+                    Ok(Async::Ready(Some((Some(item), stream)))) => {
+                        self.connections.push(stream.into_future());
+                        return Ok(Async::Ready(Some(item)));
+                    },
+                    // A connection has closed
+                    // Drop the stream and loop back
+                    // This will mean attempting to accept a new connnection
+                    // TODO: Work through implications of this
+                    Ok(Async::Ready(Some((None, _)))) => continue 'poll_conns,
+                    // The queue is empty or nothing is ready
+                    Ok(Async::Ready(None)) | Ok(Async::NotReady) => break 'poll_conns,
+                    Err((err, stream)) => {
+                        // TODO: Figure out what errors we can recover from
+                        // self.connections.push(stream.into_future());
+                        return Err(err);
+                    }
+                }
+            }
+
+            // If we've gotten this far, then there are no events for us to process
+            // and nothing was ready, so figure out if we're not done yet  or if
+            // we've reached the end.
+            if self.stream.is_done() {
+                Ok(Async::Ready(None))
+            } else {
+                Ok(Async::NotReady)
+            }
+        }
+    }
+
+    trait StreamListenExt: Stream {
+        fn listen(self, max_connections: usize) -> Listen<Self>
+        where
+            Self: Sized,
+            Self::Item: Stream,
+            <Self::Item as Stream>::Error: From<Self::Error>,
+        {
+            Listen {
+                stream: self.fuse(),
+                connections: FuturesUnordered::new(),
+                max: max_connections,
+            }
+        }
+    }
+
+    impl<S> StreamListenExt for S where S: Stream { }
 
     pub struct Decode<F> {
         next_index: usize,
