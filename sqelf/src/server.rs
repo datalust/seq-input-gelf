@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, str::FromStr};
+use std::{net::SocketAddr, str::FromStr, time::Duration};
 
 use tokio::{prelude::*, runtime::Runtime};
 
@@ -41,6 +41,13 @@ pub struct Config {
     If this value is reached then incoming messages will be dropped.
     */
     pub unprocessed_capacity: usize,
+    /**
+    The duration to keep client TCP connections alive for.
+
+    If the client doesn't complete a message within the period
+    then the connection will be closed.
+    */
+    pub tcp_keep_alive_secs: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -67,6 +74,7 @@ impl Default for Config {
             bind: "0.0.0.0:12201".to_owned(),
             protocol: Protocol::Udp,
             unprocessed_capacity: 1024,
+            tcp_keep_alive_secs: 2 * 60, // 2 minutes
         }
     }
 }
@@ -135,7 +143,10 @@ pub fn build(
     let incoming: Box<dyn Stream<Item = Message, Error = Error> + Send + Sync> =
         match config.protocol {
             Protocol::Udp => Box::new(udp::Server::bind(&addr)?.build(receive)),
-            Protocol::Tcp => Box::new(tcp::Server::bind(&addr)?.build(receive)),
+            Protocol::Tcp => Box::new(
+                tcp::Server::bind(&addr)?
+                    .build(Duration::from_secs(config.tcp_keep_alive_secs), receive),
+            ),
         };
 
     let (process_tx, process_rx) = mpsc::channel(config.unprocessed_capacity);
@@ -296,17 +307,12 @@ mod udp {
 mod tcp {
     use super::*;
 
-    use futures::{
-        stream::{
-            StreamFuture,
-            Fuse,
-            futures_unordered::FuturesUnordered,
-        },
-    };
+    use futures::stream::{futures_unordered::FuturesUnordered, Fuse, StreamFuture};
 
     use tokio::{
         codec::{Decoder, FramedRead},
         net::tcp::TcpListener,
+        timer::Timeout,
     };
 
     pub(super) struct Server(TcpListener);
@@ -320,13 +326,19 @@ mod tcp {
 
         pub(super) fn build(
             self,
+            keep_alive: Duration,
             receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static + Clone,
         ) -> impl Stream<Item = Message, Error = Error> {
             emit("Setting up for TCP");
 
             self.0
                 .incoming()
-                .map(move |conn| FramedRead::new(conn, Decode::new(receive.clone())))
+                .map(move |conn| {
+                    let decode = Decode::new(receive.clone());
+                    let protocol = FramedRead::new(conn, decode);
+
+                    TimeoutStream::new(protocol, keep_alive)
+                })
                 .listen(1024)
         }
     }
@@ -357,30 +369,32 @@ mod tcp {
                 'fill_conns: while self.connections.len() < self.max {
                     let stream = match self.stream.poll()? {
                         Async::Ready(Some(s)) => s.into_future(),
-                        Async::Ready(None) |
-                        Async::NotReady => break 'fill_conns,
+                        Async::Ready(None) | Async::NotReady => break 'fill_conns,
                     };
 
                     self.connections.push(stream.into_future());
                 }
 
                 // Try polling the stream
+                // NOTE: We're assuming the unordered list will
+                // always make forward progress polling futures
+                // even if one future is particularly chatty
                 match self.connections.poll() {
                     // We have an item from a connection
                     Ok(Async::Ready(Some((Some(item), stream)))) => {
                         self.connections.push(stream.into_future());
                         return Ok(Async::Ready(Some(item)));
-                    },
+                    }
                     // A connection has closed
                     // Drop the stream and loop back
                     // This will mean attempting to accept a new connnection
-                    // TODO: Work through implications of this
-                    Ok(Async::Ready(Some((None, _)))) => continue 'poll_conns,
+                    Ok(Async::Ready(Some((None, _stream)))) => continue 'poll_conns,
                     // The queue is empty or nothing is ready
                     Ok(Async::Ready(None)) | Ok(Async::NotReady) => break 'poll_conns,
-                    Err((err, stream)) => {
-                        // TODO: Figure out what errors we can recover from
-                        // self.connections.push(stream.into_future());
+                    // An error occurred
+                    // Drop the stream, but return the error
+                    // FIXME: Some errors should be recoverable
+                    Err((err, _stream)) => {
                         return Err(err);
                     }
                 }
@@ -412,7 +426,7 @@ mod tcp {
         }
     }
 
-    impl<S> StreamListenExt for S where S: Stream { }
+    impl<S> StreamListenExt for S where S: Stream {}
 
     pub struct Decode<F> {
         next_index: usize,
@@ -466,6 +480,40 @@ mod tcp {
                     }
                 }
             })
+        }
+    }
+
+    struct TimeoutStream<S> {
+        stream: Timeout<S>,
+    }
+
+    impl<S> TimeoutStream<S>
+    where
+        S: Stream,
+    {
+        fn new(stream: S, keep_alive: Duration) -> Self {
+            TimeoutStream {
+                stream: Timeout::new(stream, keep_alive),
+            }
+        }
+    }
+
+    impl<S> Stream for TimeoutStream<S>
+    where
+        S: Stream,
+    {
+        type Item = S::Item;
+        type Error = S::Error;
+
+        fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+            match self.stream.poll() {
+                Err(ref e) if e.is_elapsed() => Ok(Async::Ready(None)),
+                Err(e) => match e.into_inner() {
+                    Some(e) => Err(e),
+                    None => Ok(Async::Ready(None)),
+                },
+                Ok(item) => Ok(item),
+            }
         }
     }
 }

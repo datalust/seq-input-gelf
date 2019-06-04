@@ -29,7 +29,7 @@ impl Config {
         } else {
             read_environment(&mut config.server.protocol, "GELF_PROTOCOL")?;
         };
-        
+
         let enable_diagnostics = if is_seq_app {
             "SEQ_APP_SETTING_ENABLEDIAGNOSTICS"
         } else {
