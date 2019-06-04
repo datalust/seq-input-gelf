@@ -20,7 +20,7 @@
       "useTcp": {
         "inputType": "Checkbox",
         "displayName": "Use TCP",
-        "helpText": "Listen for GELF messages over TCP instead of UDP.",
+        "helpText": "Listen for GELF messages over TCP instead of UDP. TCP support is experimental and is not suitable for direct internet-facing workloads.",
         "isOptional": true
       },
       "enableDiagnostics": {
