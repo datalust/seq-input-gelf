@@ -162,7 +162,7 @@ function Start-SeqEnvironment($protocol) {
     docker run --name sqelf-test-sqelf `
         --network sqelf-test `
         -e SEQ_ADDRESS=http://sqelf-test-seq:5341 `
-        -e GELF_PROTOCOL=$protocol `
+        -e GELF_ADDRESS="${protocol}://0.0.0.0:12201" `
         -itd `
         -p "12202:${portArg}" `
         sqelf-ci:latest
