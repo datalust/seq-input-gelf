@@ -38,8 +38,10 @@ fn expect(protocol: server::Protocol, to_receive: ToReceive, check: impl Fn(&[Va
     // Build a server
     let mut server = server::build(
         server::Config {
-            bind: "0.0.0.0:12202".into(),
-            protocol,
+            bind: server::Bind {
+                addr: "0.0.0.0:12202".into(),
+                protocol,
+            },
             ..Default::default()
         },
         {

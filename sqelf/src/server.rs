@@ -19,7 +19,10 @@ metrics! {
     receive_ok,
     receive_err,
     process_ok,
-    process_err
+    process_err,
+    tcp_conn_accept,
+    tcp_conn_close,
+    tcp_conn_timeout
 }
 
 /**
@@ -30,11 +33,7 @@ pub struct Config {
     /**
     The address to bind the server to.
     */
-    pub bind: String,
-    /**
-    The protocol to use.
-    */
-    pub protocol: Protocol,
+    pub bind: Bind,
     /**
     The maximum number of unprocessed messages.
 
@@ -50,20 +49,35 @@ pub struct Config {
     pub tcp_keep_alive_secs: u64,
 }
 
+#[derive(Debug, Clone)]
+pub struct Bind {
+    pub addr: String,
+    pub protocol: Protocol,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Protocol {
     Udp,
     Tcp,
 }
 
-impl FromStr for Protocol {
+impl FromStr for Bind {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "udp" | "UDP" => Ok(Protocol::Udp),
-            "tcp" | "TCP" => Ok(Protocol::Tcp),
-            _ => Err(err_msg("invalid protocol value (expected `udp` or `tcp)`")),
+        match s.get(0..6) {
+            Some("tcp://") => Ok(Bind {
+                addr: s[6..].to_owned(),
+                protocol: Protocol::Tcp,
+            }),
+            Some("udp://") => Ok(Bind {
+                addr: s[6..].to_owned(),
+                protocol: Protocol::Udp,
+            }),
+            _ => Ok(Bind {
+                addr: s.to_owned(),
+                protocol: Protocol::Udp,
+            })
         }
     }
 }
@@ -71,8 +85,10 @@ impl FromStr for Protocol {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            bind: "0.0.0.0:12201".to_owned(),
-            protocol: Protocol::Udp,
+            bind: Bind {
+                addr: "0.0.0.0:12201".to_owned(),
+                protocol: Protocol::Udp,
+            },
             unprocessed_capacity: 1024,
             tcp_keep_alive_secs: 2 * 60, // 2 minutes
         }
@@ -138,10 +154,10 @@ pub fn build(
 ) -> Result<Server, Error> {
     emit("Starting GELF server");
 
-    let addr = config.bind.parse()?;
+    let addr = config.bind.addr.parse()?;
 
     let incoming: Box<dyn Stream<Item = Message, Error = Error> + Send + Sync> =
-        match config.protocol {
+        match config.bind.protocol {
             Protocol::Udp => Box::new(udp::Server::bind(&addr)?.build(receive)),
             Protocol::Tcp => Box::new(
                 tcp::Server::bind(&addr)?
@@ -492,9 +508,17 @@ mod tcp {
         S: Stream,
     {
         fn new(stream: S, keep_alive: Duration) -> Self {
+            increment!(server.tcp_conn_accept);
+
             TimeoutStream {
                 stream: Timeout::new(stream, keep_alive),
             }
+        }
+    }
+
+    impl<S> Drop for TimeoutStream<S> {
+        fn drop(&mut self) {
+            increment!(server.tcp_conn_close);
         }
     }
 
@@ -507,7 +531,11 @@ mod tcp {
 
         fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
             match self.stream.poll() {
-                Err(ref e) if e.is_elapsed() => Ok(Async::Ready(None)),
+                Err(ref e) if e.is_elapsed() => {
+                    increment!(server.tcp_conn_timeout);
+
+                    Ok(Async::Ready(None))
+                },
                 Err(e) => match e.into_inner() {
                     Some(e) => Err(e),
                     None => Ok(Async::Ready(None)),
