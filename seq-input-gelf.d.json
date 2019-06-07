@@ -14,7 +14,7 @@
     "settings": {
       "gelfAddress": {
         "displayName": "GELF address",
-        "helpText": "The socket address (IP address and port) on which the input will listen for UDP GELF payloads. The default is `0.0.0.0:12201`.",
+        "helpText": "The url (protocol, IP address and port) on which the input will listen for GELF payloads. The default is `udp://0.0.0.0:12201`. Specifying the protocol as `tcp` will listen on TCP instead of UDP. TCP support is experimental and is not suitable for direct internet-facing workloads.",
         "isOptional": true
       },
       "enableDiagnostics": {

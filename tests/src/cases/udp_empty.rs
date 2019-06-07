@@ -1,7 +1,7 @@
 use crate::support::*;
 
 pub fn test() {
-    expect(
+    udp_expect(
         ToReceive {
             count: 0,
             when_sending: vec![],

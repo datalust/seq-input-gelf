@@ -124,7 +124,7 @@ function Publish-Container($version)
     if ($LASTEXITCODE) { exit 1 }
 }
 
-function Start-SeqEnvironment {
+function Start-SeqEnvironment($protocol) {
     Write-BeginStep $MYINVOCATION
 
     Push-Location ci/smoke-test
@@ -142,6 +142,11 @@ function Start-SeqEnvironment {
         exit 1
     }
 
+    $portArg = "12201"
+    if ($protocol -eq "udp") {
+        $portArg = "12201/udp"
+    }
+
     docker pull datalust/seq:latest
     docker run --name sqelf-test-seq `
         --network sqelf-test `
@@ -157,8 +162,9 @@ function Start-SeqEnvironment {
     docker run --name sqelf-test-sqelf `
         --network sqelf-test `
         -e SEQ_ADDRESS=http://sqelf-test-seq:5341 `
+        -e GELF_ADDRESS="${protocol}://0.0.0.0:12201" `
         -itd `
-        -p 12202:12201/udp `
+        -p "12202:${portArg}" `
         sqelf-ci:latest
     if ($LASTEXITCODE) {
         Pop-Location
@@ -206,14 +212,14 @@ function Build-TestAppContainer {
     if ($LASTEXITCODE) { exit 1 }
 }
 
-function Invoke-TestApp {
+function Invoke-TestApp($protocol) {
     Write-BeginStep $MYINVOCATION
 
     docker run `
         --rm `
         -i `
         --log-driver gelf `
-        --log-opt gelf-address=udp://localhost:12202 `
+        --log-opt "gelf-address=${protocol}://localhost:12202" `
         sqelf-app-test:latest
     if ($LASTEXITCODE) { exit 1 }
 

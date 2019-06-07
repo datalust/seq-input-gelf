@@ -1,4 +1,9 @@
-use std::{net::UdpSocket, thread, time::Duration};
+use std::{
+    io::Write,
+    net::{self, TcpStream, UdpSocket},
+    thread,
+    time::Duration,
+};
 
 use sqelf::{process, receive, server};
 
@@ -9,7 +14,15 @@ pub struct ToReceive {
     pub when_sending: Vec<Vec<u8>>,
 }
 
-pub fn expect(to_receive: ToReceive, check: impl Fn(&[Value])) {
+pub fn udp_expect(to_receive: ToReceive, check: impl Fn(&[Value])) {
+    expect(server::Protocol::Udp, to_receive, check)
+}
+
+pub fn tcp_expect(to_receive: ToReceive, check: impl Fn(&[Value])) {
+    expect(server::Protocol::Tcp, to_receive, check)
+}
+
+fn expect(protocol: server::Protocol, to_receive: ToReceive, check: impl Fn(&[Value])) {
     let ToReceive {
         count,
         when_sending,
@@ -25,7 +38,10 @@ pub fn expect(to_receive: ToReceive, check: impl Fn(&[Value])) {
     // Build a server
     let mut server = server::build(
         server::Config {
-            bind: "0.0.0.0:12202".into(),
+            bind: server::Bind {
+                addr: "0.0.0.0:12202".into(),
+                protocol,
+            },
             ..Default::default()
         },
         {
@@ -56,10 +72,26 @@ pub fn expect(to_receive: ToReceive, check: impl Fn(&[Value])) {
     let server = thread::spawn(move || server.run().expect("failed to run server"));
 
     // Send our datagrams
-    let sock = UdpSocket::bind("127.0.0.1:0").expect("failed to bind client socket");
-    for dgram in when_sending {
-        sock.send_to(&dgram, "127.0.0.1:12202")
-            .expect("failed to send datagram");
+    match protocol {
+        server::Protocol::Udp => {
+            let sock = UdpSocket::bind("127.0.0.1:0").expect("failed to bind client socket");
+            for dgram in when_sending {
+                sock.send_to(&dgram, "127.0.0.1:12202")
+                    .expect("failed to send datagram");
+            }
+        }
+        server::Protocol::Tcp => {
+            let mut stream =
+                TcpStream::connect("127.0.0.1:12202").expect("failed to bind client stream");
+
+            for chunk in when_sending {
+                stream.write(&chunk).expect("failed to send chunk");
+            }
+
+            stream
+                .shutdown(net::Shutdown::Both)
+                .expect("failed to close connection");
+        }
     }
 
     // Wait for the messages to be processed
@@ -96,12 +128,12 @@ pub(crate) fn test_child(name: &str) {
     test.wait().expect("test execution failed");
 }
 
-macro_rules! dgrams {
-    ($(..$dgrams:expr),+) => {{
+macro_rules! net_chunks {
+    ($(..$net_chunks:expr),+) => {{
         let mut v = Vec::new();
 
         $(
-            v.extend($dgrams);
+            v.extend($net_chunks);
         )+
 
         v
@@ -110,6 +142,10 @@ macro_rules! dgrams {
         let v = serde_json::to_vec(&json!({$($json)*})).unwrap();
         vec![v]
     }}
+}
+
+pub(crate) fn tcp_delim() -> Vec<Vec<u8>> {
+    vec![vec![b'\0']]
 }
 
 macro_rules! cases {

@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, str::FromStr, time::Duration};
 
 use tokio::{prelude::*, runtime::Runtime};
 
@@ -19,7 +19,10 @@ metrics! {
     receive_ok,
     receive_err,
     process_ok,
-    process_err
+    process_err,
+    tcp_conn_accept,
+    tcp_conn_close,
+    tcp_conn_timeout
 }
 
 /**
@@ -28,22 +31,66 @@ Server configuration.
 #[derive(Debug, Clone)]
 pub struct Config {
     /**
-    The address to bind the UDP server to.
+    The address to bind the server to.
     */
-    pub bind: String,
+    pub bind: Bind,
     /**
     The maximum number of unprocessed messages.
 
     If this value is reached then incoming messages will be dropped.
     */
     pub unprocessed_capacity: usize,
+    /**
+    The duration to keep client TCP connections alive for.
+
+    If the client doesn't complete a message within the period
+    then the connection will be closed.
+    */
+    pub tcp_keep_alive_secs: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct Bind {
+    pub addr: String,
+    pub protocol: Protocol,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Protocol {
+    Udp,
+    Tcp,
+}
+
+impl FromStr for Bind {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.get(0..6) {
+            Some("tcp://") => Ok(Bind {
+                addr: s[6..].to_owned(),
+                protocol: Protocol::Tcp,
+            }),
+            Some("udp://") => Ok(Bind {
+                addr: s[6..].to_owned(),
+                protocol: Protocol::Udp,
+            }),
+            _ => Ok(Bind {
+                addr: s.to_owned(),
+                protocol: Protocol::Udp,
+            })
+        }
+    }
 }
 
 impl Default for Config {
     fn default() -> Self {
         Config {
-            bind: "0.0.0.0:12201".to_owned(),
+            bind: Bind {
+                addr: "0.0.0.0:12201".to_owned(),
+                protocol: Protocol::Udp,
+            },
             unprocessed_capacity: 1024,
+            tcp_keep_alive_secs: 2 * 60, // 2 minutes
         }
     }
 }
@@ -102,13 +149,21 @@ Build a server to receive GELF messages and process them.
 */
 pub fn build(
     config: Config,
-    receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static,
-    mut process: impl FnMut(Message) -> Result<(), Error> + Send + Sync + 'static,
+    receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static + Clone,
+    mut process: impl FnMut(Message) -> Result<(), Error> + Send + Sync + 'static + Clone,
 ) -> Result<Server, Error> {
     emit("Starting GELF server");
 
-    let addr = config.bind.parse()?;
-    let sock = ServerSocket::bind(&addr)?;
+    let addr = config.bind.addr.parse()?;
+
+    let incoming: Box<dyn Stream<Item = Message, Error = Error> + Send + Sync> =
+        match config.bind.protocol {
+            Protocol::Udp => Box::new(udp::Server::bind(&addr)?.build(receive)),
+            Protocol::Tcp => Box::new(
+                tcp::Server::bind(&addr)?
+                    .build(Duration::from_secs(config.tcp_keep_alive_secs), receive),
+            ),
+        };
 
     let (process_tx, process_rx) = mpsc::channel(config.unprocessed_capacity);
     let (handle_tx, handle_rx) = oneshot::channel();
@@ -150,7 +205,7 @@ pub fn build(
 
         // Accept and process incoming GELF messages over UDP
         // This stream should never return an `Err` variant
-        let receive = sock.build(receive).then(|r| match r {
+        let receive = incoming.then(|r| match r {
             Ok(msg) => {
                 increment!(server.receive_ok);
 
@@ -220,7 +275,7 @@ enum Op {
     Shutdown,
 }
 
-mod imp {
+mod udp {
     use super::*;
 
     use tokio::{
@@ -228,19 +283,21 @@ mod imp {
         net::udp::{UdpFramed, UdpSocket},
     };
 
-    pub(super) struct ServerSocket(UdpSocket);
+    pub(super) struct Server(UdpSocket);
 
-    impl ServerSocket {
+    impl Server {
         pub(super) fn bind(addr: &SocketAddr) -> Result<Self, Error> {
             let sock = UdpSocket::bind(&addr)?;
 
-            Ok(ServerSocket(sock))
+            Ok(Server(sock))
         }
 
         pub(super) fn build(
             self,
             receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static,
         ) -> impl Stream<Item = Message, Error = Error> {
+            emit("Setting up for UDP");
+
             UdpFramed::new(self.0, Decode(receive)).map(|(msg, _)| msg)
         }
     }
@@ -255,6 +312,7 @@ mod imp {
         type Error = Error;
 
         fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+            // All datagrams are considered a valid message
             let src = src.take().freeze();
 
             (self.0)(src)
@@ -262,4 +320,228 @@ mod imp {
     }
 }
 
-use self::imp::*;
+mod tcp {
+    use super::*;
+
+    use futures::stream::{futures_unordered::FuturesUnordered, Fuse, StreamFuture};
+
+    use tokio::{
+        codec::{Decoder, FramedRead},
+        net::tcp::TcpListener,
+        timer::Timeout,
+    };
+
+    pub(super) struct Server(TcpListener);
+
+    impl Server {
+        pub(super) fn bind(addr: &SocketAddr) -> Result<Self, Error> {
+            let listener = TcpListener::bind(&addr)?;
+
+            Ok(Server(listener))
+        }
+
+        pub(super) fn build(
+            self,
+            keep_alive: Duration,
+            receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static + Clone,
+        ) -> impl Stream<Item = Message, Error = Error> {
+            emit("Setting up for TCP");
+
+            self.0
+                .incoming()
+                .map(move |conn| {
+                    let decode = Decode::new(receive.clone());
+                    let protocol = FramedRead::new(conn, decode);
+
+                    TimeoutStream::new(protocol, keep_alive)
+                })
+                .listen(1024)
+        }
+    }
+
+    struct Listen<S>
+    where
+        S: Stream,
+        S::Item: Stream,
+        <S::Item as Stream>::Error: From<S::Error>,
+    {
+        stream: Fuse<S>,
+        connections: FuturesUnordered<StreamFuture<S::Item>>,
+        max: usize,
+    }
+
+    impl<S> Stream for Listen<S>
+    where
+        S: Stream,
+        S::Item: Stream,
+        <S::Item as Stream>::Error: From<S::Error>,
+    {
+        type Item = <S::Item as Stream>::Item;
+        type Error = <S::Item as Stream>::Error;
+
+        fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+            'poll_conns: loop {
+                // Fill up our accepted connections
+                'fill_conns: while self.connections.len() < self.max {
+                    let stream = match self.stream.poll()? {
+                        Async::Ready(Some(s)) => s.into_future(),
+                        Async::Ready(None) | Async::NotReady => break 'fill_conns,
+                    };
+
+                    self.connections.push(stream.into_future());
+                }
+
+                // Try polling the stream
+                // NOTE: We're assuming the unordered list will
+                // always make forward progress polling futures
+                // even if one future is particularly chatty
+                match self.connections.poll() {
+                    // We have an item from a connection
+                    Ok(Async::Ready(Some((Some(item), stream)))) => {
+                        self.connections.push(stream.into_future());
+                        return Ok(Async::Ready(Some(item)));
+                    }
+                    // A connection has closed
+                    // Drop the stream and loop back
+                    // This will mean attempting to accept a new connnection
+                    Ok(Async::Ready(Some((None, _stream)))) => continue 'poll_conns,
+                    // The queue is empty or nothing is ready
+                    Ok(Async::Ready(None)) | Ok(Async::NotReady) => break 'poll_conns,
+                    // An error occurred
+                    // Drop the stream, but return the error
+                    // FIXME: Some errors should be recoverable
+                    Err((err, _stream)) => {
+                        return Err(err);
+                    }
+                }
+            }
+
+            // If we've gotten this far, then there are no events for us to process
+            // and nothing was ready, so figure out if we're not done yet  or if
+            // we've reached the end.
+            if self.stream.is_done() {
+                Ok(Async::Ready(None))
+            } else {
+                Ok(Async::NotReady)
+            }
+        }
+    }
+
+    trait StreamListenExt: Stream {
+        fn listen(self, max_connections: usize) -> Listen<Self>
+        where
+            Self: Sized,
+            Self::Item: Stream,
+            <Self::Item as Stream>::Error: From<Self::Error>,
+        {
+            Listen {
+                stream: self.fuse(),
+                connections: FuturesUnordered::new(),
+                max: max_connections,
+            }
+        }
+    }
+
+    impl<S> StreamListenExt for S where S: Stream {}
+
+    pub struct Decode<F> {
+        next_index: usize,
+        receive: F,
+    }
+
+    impl<F> Decode<F> {
+        pub fn new(receive: F) -> Self {
+            Decode {
+                next_index: 0,
+                receive,
+            }
+        }
+    }
+
+    impl<F> Decoder for Decode<F>
+    where
+        F: FnMut(Bytes) -> Result<Option<Message>, Error>,
+    {
+        type Item = Message;
+        type Error = Error;
+
+        fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+            // Messages are separated by null bytes
+            let sep_offset = src[self.next_index..].iter().position(|b| *b == b'\0');
+
+            if let Some(offset) = sep_offset {
+                let sep_index = offset + self.next_index;
+                self.next_index = 0;
+                let src = src.split_to(sep_index + 1).freeze();
+
+                (self.receive)(src.slice_to(src.len() - 1))
+            } else {
+                self.next_index = src.len();
+
+                Ok(None)
+            }
+        }
+
+        fn decode_eof(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+            Ok(match self.decode(src)? {
+                Some(frame) => Some(frame),
+                None => {
+                    if src.is_empty() {
+                        None
+                    } else {
+                        let src = src.take().freeze();
+                        self.next_index = 0;
+
+                        (self.receive)(src)?
+                    }
+                }
+            })
+        }
+    }
+
+    struct TimeoutStream<S> {
+        stream: Timeout<S>,
+    }
+
+    impl<S> TimeoutStream<S>
+    where
+        S: Stream,
+    {
+        fn new(stream: S, keep_alive: Duration) -> Self {
+            increment!(server.tcp_conn_accept);
+
+            TimeoutStream {
+                stream: Timeout::new(stream, keep_alive),
+            }
+        }
+    }
+
+    impl<S> Drop for TimeoutStream<S> {
+        fn drop(&mut self) {
+            increment!(server.tcp_conn_close);
+        }
+    }
+
+    impl<S> Stream for TimeoutStream<S>
+    where
+        S: Stream,
+    {
+        type Item = S::Item;
+        type Error = S::Error;
+
+        fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+            match self.stream.poll() {
+                Err(ref e) if e.is_elapsed() => {
+                    increment!(server.tcp_conn_timeout);
+
+                    Ok(Async::Ready(None))
+                },
+                Err(e) => match e.into_inner() {
+                    Some(e) => Err(e),
+                    None => Ok(Async::Ready(None)),
+                },
+                Ok(item) => Ok(item),
+            }
+        }
+    }
+}
