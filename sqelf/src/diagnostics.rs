@@ -1,17 +1,33 @@
-use crate::error::{err_msg, Error};
-use chrono::{DateTime, Utc};
+use crate::error::{
+    err_msg,
+    Error,
+};
+use chrono::{
+    DateTime,
+    Utc,
+};
 use std::{
     collections::HashMap,
     fmt::Display,
     ops::Drop,
     str::FromStr,
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{
+            AtomicUsize,
+            Ordering,
+        },
         mpsc,
+        Mutex,
     },
     thread,
     time::Duration,
 };
+
+pub(crate) static MIN_LEVEL: MinLevel = MinLevel(AtomicUsize::new(0));
+
+lazy_static! {
+    static ref DIAGNOSTICS: Mutex<Option<Diagnostics>> = Mutex::new(None);
+}
 
 /**
 Diagnostics configuration.
@@ -37,12 +53,65 @@ impl Default for Config {
     }
 }
 
-pub(crate) struct Diagnostics {
+/**
+Initialize process-wide diagnostics.
+*/
+pub fn init(config: Config) {
+    let mut diagnostics = DIAGNOSTICS.lock().expect("failed to lock diagnostics");
+
+    if diagnostics.is_some() {
+        drop(diagnostics);
+        panic!("GELF diagnostics have already been initialized");
+    }
+
+    MIN_LEVEL.set(config.min_level);
+
+    // Only set up metrics if the minimum level is Debug
+    let metrics = if MIN_LEVEL.includes(Level::Debug) {
+        // NOTE: Diagnostics use a regular thread instead of `tokio`
+        // So that we can monitor metrics independently of the `tokio`
+        // runtime.
+        let (tx, rx) = mpsc::channel();
+        let metrics_timeout = Duration::from_millis(config.metrics_interval_ms);
+        let handle = thread::spawn(move || loop {
+            match rx.recv_timeout(metrics_timeout) {
+                Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    emit_metrics();
+                    return;
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    emit_metrics();
+                }
+            }
+        });
+
+        Some((tx, handle))
+    } else {
+        None
+    };
+
+    *diagnostics = Some(Diagnostics { metrics });
+}
+
+/**
+Stop process-wide diagnostics.
+*/
+pub fn stop() -> Result<(), Error> {
+    let mut diagnostics = DIAGNOSTICS.lock().expect("failed to lock diagnostics");
+
+    if let Some(mut diagnostics) = diagnostics.take() {
+        diagnostics.stop_metrics()?;
+    }
+
+    Ok(())
+}
+
+struct Diagnostics {
     metrics: Option<(mpsc::Sender<()>, thread::JoinHandle<()>)>,
 }
 
 impl Diagnostics {
-    pub fn stop_metrics(&mut self) -> Result<(), Error> {
+    fn stop_metrics(&mut self) -> Result<(), Error> {
         if let Some((tx, handle)) = self.metrics.take() {
             tx.send(())?;
 
@@ -61,33 +130,6 @@ impl Drop for Diagnostics {
             let _ = tx.send(());
         }
     }
-}
-
-pub(crate) fn init(config: Config) -> Diagnostics {
-    MIN_LEVEL.set(config.min_level);
-
-    // Only set up metrics if the minimum level is Debug
-    let metrics = if MIN_LEVEL.includes(Level::Debug) {
-        // NOTE: Diagnostics use a regular thread instead of `tokio`
-        // So that we can monitor metrics independently of the `tokio`
-        // runtime.
-        let (tx, rx) = mpsc::channel();
-        let metrics_timeout = Duration::from_millis(config.metrics_interval_ms);
-        let handle = thread::spawn(move || loop {
-            match rx.recv_timeout(metrics_timeout) {
-                Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => return,
-                _ => {
-                    emit_metrics();
-                }
-            }
-        });
-
-        Some((tx, handle))
-    } else {
-        None
-    };
-
-    Diagnostics { metrics }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,7 +219,7 @@ pub fn emit_err(error: &impl Display, message_template: &'static str) {
     }
 }
 
-pub fn emit_metrics() {
+fn emit_metrics() {
     if MIN_LEVEL.includes(Level::Debug) {
         #[derive(Serialize)]
         struct EmitMetrics {
@@ -214,56 +256,7 @@ pub fn emit_metrics() {
     }
 }
 
-/// For use with `map_err`
-pub(crate) fn emit_err_abort<TInner>(message_template: &'static str) -> impl Fn(TInner) -> ()
-where
-    TInner: Display,
-{
-    emit_err_abort_with(message_template, || ())
-}
-
-/// For use with `map_err`
-pub(crate) fn emit_err_abort_with<TInner, TError>(
-    message_template: &'static str,
-    err: impl Fn() -> TError,
-) -> impl Fn(TInner) -> TError
-where
-    TInner: Display,
-{
-    move |e| {
-        emit_err(&e, message_template);
-
-        err()
-    }
-}
-
-/// For use with `or_else`
-pub(crate) fn emit_err_continue<TInner, TOuter>(
-    message_template: &'static str,
-) -> impl Fn(TInner) -> Result<(), TOuter>
-where
-    TInner: Display,
-{
-    emit_err_continue_with(message_template, || ())
-}
-
-/// For use with `or_else`
-pub(crate) fn emit_err_continue_with<TInner, TOk, TOuter>(
-    message_template: &'static str,
-    ok: impl Fn() -> TOk,
-) -> impl Fn(TInner) -> Result<TOk, TOuter>
-where
-    TInner: Display,
-{
-    move |err| {
-        emit_err(&err, message_template);
-
-        Ok(ok())
-    }
-}
-
 pub(crate) struct MinLevel(AtomicUsize);
-pub(crate) static MIN_LEVEL: MinLevel = MinLevel(AtomicUsize::new(0));
 
 impl MinLevel {
     fn set(&self, min: Level) {

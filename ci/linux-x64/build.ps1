@@ -10,11 +10,34 @@ Push-Location "$PSScriptRoot/../../"
 function Invoke-SmokeTest($protocol) {
     Write-BeginStep $MYINVOCATION
 
-    Start-SeqEnvironment($protocol)
-    Invoke-TestApp($protocol)
-    Check-SqelfLogs
-    Check-SeqLogs
-    Check-ClefOutput
+    $finished = $false
+    $retries = 0
+
+    do {
+        try {
+            Start-SeqEnvironment($protocol)
+            Invoke-TestApp($protocol)
+            Check-SqelfLogs
+            Check-SeqLogs
+            Check-ClefOutput
+
+            $finished = $true
+        }
+        catch {
+            Stop-SeqEnvironment
+
+            if ($retries -gt 3) {
+                exit 1
+            }
+            else {
+                $retries = $retries + 1
+                Write-Host "Retrying (attempt $retries)"
+            }
+        }
+        
+    }
+    while ($finished -eq $false)
+
     Stop-SeqEnvironment
 }
 

@@ -5,6 +5,13 @@ pub fn test() {
     let mut stream = tcp::stream();
 
     stream.write(net_chunks![
+        ..bytes(b"not json!"),
+        ..tcp_delim()
+    ]);
+
+    assert_eq!(0, server.received());
+
+    stream.write(net_chunks![
         ..net_chunks!({
             "host": "foo",
             "short_message": "bar"
@@ -15,8 +22,6 @@ pub fn test() {
     server.receive(|received| {
         assert_eq!("bar", received["@m"]);
     });
-
-    assert_eq!(1, server.received());
 
     stream.close();
     server.close();

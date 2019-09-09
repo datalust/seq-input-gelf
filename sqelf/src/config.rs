@@ -1,6 +1,15 @@
-use std::{env, str::FromStr};
+use std::{
+    env,
+    str::FromStr,
+};
 
-use crate::{diagnostics, process, receive, server, Error};
+use crate::{
+    diagnostics,
+    process,
+    receive,
+    server,
+    Error,
+};
 
 #[derive(Debug, Default, Clone)]
 pub struct Config {
@@ -35,7 +44,7 @@ impl Config {
     }
 }
 
-pub(crate) fn is_seq_app() -> bool {
+pub fn is_seq_app() -> bool {
     env::var("SEQ_APP_ID").is_ok()
 }
 

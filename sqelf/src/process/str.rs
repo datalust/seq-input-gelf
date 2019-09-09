@@ -1,16 +1,34 @@
 use std::{
-    cmp::{Ord, Ordering, PartialOrd},
+    cmp::{
+        Ord,
+        Ordering,
+        PartialOrd,
+    },
     fmt,
-    hash::{Hash, Hasher},
+    hash::{
+        Hash,
+        Hasher,
+    },
     ops::Deref,
 };
 
 use serde::{
-    de::{self, Deserialize, Deserializer, Visitor},
-    ser::{Serialize, Serializer},
+    de::{
+        self,
+        Deserialize,
+        Deserializer,
+        Visitor,
+    },
+    ser::{
+        Serialize,
+        Serializer,
+    },
 };
 
-use inlinable_string::{InlineString, INLINE_STRING_CAPACITY};
+use inlinable_string::{
+    InlineString,
+    INLINE_STRING_CAPACITY,
+};
 
 pub use string_cache::DefaultAtom as CachedString;
 

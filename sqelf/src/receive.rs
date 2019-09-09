@@ -1,14 +1,35 @@
 use std::{
     cmp,
-    collections::{hash_map, BTreeMap, HashMap},
-    io::{self, Read},
-    time::{self, Duration, SystemTime},
+    collections::{
+        hash_map,
+        BTreeMap,
+        HashMap,
+    },
+    io::{
+        self,
+        Read,
+    },
+    time::{
+        self,
+        Duration,
+        SystemTime,
+    },
 };
 
-use bytes::{Buf, Bytes, IntoBuf};
-use libflate::{gzip, zlib};
+use bytes::{
+    Buf,
+    Bytes,
+    IntoBuf,
+};
+use libflate::{
+    gzip,
+    zlib,
+};
 
-use crate::{error::Error, io::MemRead};
+use crate::{
+    error::Error,
+    io::MemRead,
+};
 
 metrics! {
     chunk,
@@ -538,11 +559,20 @@ impl Compression {
 mod tests {
     use super::*;
 
-    use std::{io::Write, thread};
+    use std::{
+        io::Write,
+        thread,
+    };
 
-    use libflate::{gzip, zlib};
+    use libflate::{
+        gzip,
+        zlib,
+    };
 
-    use byteorder::{BigEndian, ByteOrder};
+    use byteorder::{
+        BigEndian,
+        ByteOrder,
+    };
 
     fn chunk(id: u64, seq_num: u8, seq_total: u8, bytes: &[u8]) -> Bytes {
         let mut header = vec![0x1e, 0x0f];

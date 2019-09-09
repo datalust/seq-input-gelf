@@ -5,14 +5,16 @@ authors = ["Datalust"]
 edition = "2018"
 license = "Apache-2.0"
 
-[dependencies.futures]
-version = "0.1"
+[dependencies.futures-preview]
+version = "0.3.0-alpha.18"
+features = ["nightly", "async-await"]
+
+[dependencies.pin-utils]
+version = "0.1.0-alpha.4"
 
 [dependencies.tokio]
-version = "0.1"
-
-[dependencies.tokio-signal]
-version = "0.2"
+version = "0.2.0-alpha.4"
+features = ["signal"]
 
 [dependencies.bytes]
 version = "0.4"
@@ -44,3 +46,6 @@ version = "1"
 [dependencies.chrono]
 version = "0.4"
 features = ["serde"]
+
+[dependencies.lazy_static]
+version = "1"
