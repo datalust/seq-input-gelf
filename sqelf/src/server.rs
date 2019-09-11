@@ -51,12 +51,6 @@ pub struct Config {
     */
     pub bind: Bind,
     /**
-    The maximum number of unprocessed messages.
-
-    If this value is reached then incoming messages will be dropped.
-    */
-    pub unprocessed_capacity: usize,
-    /**
     The duration to keep client TCP connections alive for.
 
     If the client doesn't complete a message within the period
@@ -105,7 +99,6 @@ impl Default for Config {
                 addr: "0.0.0.0:12201".to_owned(),
                 protocol: Protocol::Udp,
             },
-            unprocessed_capacity: 1024,
             tcp_keep_alive_secs: 2 * 60, // 2 minutes
         }
     }
