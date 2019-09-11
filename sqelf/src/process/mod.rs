@@ -4,9 +4,16 @@ pub mod str;
 
 use serde_json::Value;
 
-use self::str::{CachedString, Inlinable, Str};
+use self::str::{
+    CachedString,
+    Inlinable,
+    Str,
+};
 
-use crate::{error::Error, io::MemRead};
+use crate::{
+    error::Error,
+    io::MemRead,
+};
 
 use std::collections::HashMap;
 
@@ -63,7 +70,7 @@ impl Process {
         }
     }
 
-    pub(crate) fn read_as_clef(&self, msg: impl MemRead) -> Result<(), Error> {
+    pub fn read_as_clef(&self, msg: impl MemRead) -> Result<(), Error> {
         self.with_clef(msg, |clef| {
             if let Ok(clef) = serde_json::to_string(&clef) {
                 println!("{}", clef);

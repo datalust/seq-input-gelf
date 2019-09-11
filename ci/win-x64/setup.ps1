@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$RequiredRustToolchain = "stable"
+$RequiredRustToolchain = $env:RUST_TOOLCHAIN
 
 Invoke-WebRequest -OutFile ./rustup-init.exe -Uri https://win.rustup.rs
 $ErrorActionPreference = "Continue"

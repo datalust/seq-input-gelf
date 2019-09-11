@@ -1,31 +1,32 @@
-#[macro_use]
-extern crate serde_derive;
+#![recursion_limit = "256"]
 
-#[macro_use]
-mod diagnostics;
+extern crate sqelf;
 
-#[macro_use]
-mod error;
-
-mod config;
-pub mod io;
-pub mod process;
-pub mod receive;
-pub mod server;
-
-use self::{
-    config::Config,
-    diagnostics::{emit, emit_err},
-    error::{err_msg, Error},
+use sqelf::{
+    config::{self, Config},
+    receive,
+    process,
+    diagnostics::{
+        self,
+        emit,
+        emit_err,
+    },
+    error::Error,
+    server,
 };
 
-use std::{io::Read, panic::catch_unwind, thread};
+use std::{
+    io::Read,
+    panic::catch_unwind,
+    thread,
+    any::Any,
+};
 
-fn run() -> Result<(), error::StdError> {
+fn run() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::from_env()?;
 
     // Initialize diagnostics
-    let mut diagnostics = diagnostics::init(config.diagnostics);
+    diagnostics::init(config.diagnostics);
 
     // The receiver for GELF messages
     let receive = {
@@ -46,14 +47,14 @@ fn run() -> Result<(), error::StdError> {
     if config::is_seq_app() {
         let handle = server
             .take_handle()
-            .ok_or_else(|| err_msg("Failed to acquire handle to server"))?;
+            .ok_or_else(|| Error::msg("Failed to acquire handle to server"))?;
 
         listen_for_stdin_closed(handle);
     }
 
     // Run the server and wait for it to exit
     server.run()?;
-    diagnostics.stop_metrics()?;
+    diagnostics::stop()?;
 
     Ok(())
 }
@@ -80,8 +81,8 @@ fn listen_for_stdin_closed(handle: server::Handle) {
 }
 
 fn main() {
-    let run_server: Result<(), error::StdError> = catch_unwind(|| run())
-        .map_err(|panic| error::unwrap_panic(panic).into())
+    let run_server: Result<(), Box<dyn std::error::Error>> = catch_unwind(|| run())
+        .map_err(|panic| unwrap_panic(panic).into())
         .and_then(|inner| inner);
 
     if let Err(err) = run_server {
@@ -90,4 +91,16 @@ fn main() {
     }
 
     emit("GELF input stopped");
+}
+
+fn unwrap_panic(panic: Box<dyn Any + Send + 'static>) -> Error {
+    if let Some(err) = panic.downcast_ref::<&str>() {
+        return Error::msg(err);
+    }
+
+    if let Some(err) = panic.downcast_ref::<String>() {
+        return Error::msg(err);
+    }
+
+    Error::msg("unexpected panic (this is a bug)")
 }

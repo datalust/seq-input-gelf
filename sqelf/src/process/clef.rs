@@ -1,12 +1,23 @@
 use std::{
     collections::HashMap,
     fmt,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
 use serde::{
-    de::{self, Deserialize, Deserializer, Visitor},
-    ser::{Serialize, Serializer},
+    de::{
+        self,
+        Deserialize,
+        Deserializer,
+        Visitor,
+    },
+    ser::{
+        Serialize,
+        Serializer,
+    },
 };
 
 use serde_json::Value;

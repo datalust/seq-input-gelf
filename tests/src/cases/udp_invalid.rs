@@ -5,6 +5,12 @@ pub fn test() {
     let mut sock = udp::sock();
 
     sock.send(net_chunks![
+        ..bytes(b"not json!")
+    ]);
+
+    assert_eq!(0, server.received());
+
+    sock.send(net_chunks![
         ..net_chunks!({
             "host": "foo",
             "short_message": "bar"
@@ -14,8 +20,6 @@ pub fn test() {
     server.receive(|received| {
         assert_eq!("bar", received["@m"]);
     });
-
-    assert_eq!(1, server.received());
 
     server.close();
 }

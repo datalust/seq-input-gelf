@@ -1,17 +1,33 @@
-use std::{net::SocketAddr, str::FromStr, time::Duration};
-
-use tokio::{prelude::*, runtime::Runtime};
-
-use bytes::{Bytes, BytesMut};
+use std::{
+    marker::Unpin,
+    net::SocketAddr,
+    str::FromStr,
+    time::Duration,
+};
 
 use futures::{
-    future::lazy,
-    sync::{mpsc, oneshot},
+    future::{
+        BoxFuture,
+        Either,
+    },
+    select,
+};
+
+use tokio::{
+    net::signal::ctrl_c,
+    prelude::*,
+    runtime::Runtime,
+    sync::oneshot,
+};
+
+use bytes::{
+    Bytes,
+    BytesMut,
 };
 
 use crate::{
     diagnostics::*,
-    error::{err_msg, Error},
+    error::Error,
     receive::Message,
 };
 
@@ -34,12 +50,6 @@ pub struct Config {
     The address to bind the server to.
     */
     pub bind: Bind,
-    /**
-    The maximum number of unprocessed messages.
-
-    If this value is reached then incoming messages will be dropped.
-    */
-    pub unprocessed_capacity: usize,
     /**
     The duration to keep client TCP connections alive for.
 
@@ -77,7 +87,7 @@ impl FromStr for Bind {
             _ => Ok(Bind {
                 addr: s.to_owned(),
                 protocol: Protocol::Udp,
-            })
+            }),
         }
     }
 }
@@ -89,7 +99,6 @@ impl Default for Config {
                 addr: "0.0.0.0:12201".to_owned(),
                 protocol: Protocol::Udp,
             },
-            unprocessed_capacity: 1024,
             tcp_keep_alive_secs: 2 * 60, // 2 minutes
         }
     }
@@ -99,7 +108,7 @@ impl Default for Config {
 A GELF server.
 */
 pub struct Server {
-    fut: Box<dyn Future<Item = (), Error = ()> + Send>,
+    fut: BoxFuture<'static, ()>,
     handle: Option<Handle>,
 }
 
@@ -112,16 +121,10 @@ impl Server {
         // Run the server on a fresh runtime
         // We attempt to shut this runtime down cleanly to release
         // any used resources
-        let mut runtime = Runtime::new().expect("failed to start new Runtime");
+        let runtime = Runtime::new().expect("failed to start new Runtime");
 
-        runtime
-            .block_on(self.fut)
-            .map_err(|_| err_msg("Server execution failed"))?;
-
-        runtime
-            .shutdown_now()
-            .wait()
-            .map_err(|_| err_msg("Runtime shutdown failed"))?;
+        runtime.block_on(self.fut);
+        runtime.shutdown_now();
 
         Ok(())
     }
@@ -149,130 +152,116 @@ Build a server to receive GELF messages and process them.
 */
 pub fn build(
     config: Config,
-    receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static + Clone,
-    mut process: impl FnMut(Message) -> Result<(), Error> + Send + Sync + 'static + Clone,
+    receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + Unpin + Clone + 'static,
+    mut process: impl FnMut(Message) -> Result<(), Error> + Send + Sync + Unpin + Clone + 'static,
 ) -> Result<Server, Error> {
     emit("Starting GELF server");
 
     let addr = config.bind.addr.parse()?;
-
-    let incoming: Box<dyn Stream<Item = Message, Error = Error> + Send + Sync> =
-        match config.bind.protocol {
-            Protocol::Udp => Box::new(udp::Server::bind(&addr)?.build(receive)),
-            Protocol::Tcp => Box::new(
-                tcp::Server::bind(&addr)?
-                    .build(Duration::from_secs(config.tcp_keep_alive_secs), receive),
-            ),
-        };
-
-    let (process_tx, process_rx) = mpsc::channel(config.unprocessed_capacity);
     let (handle_tx, handle_rx) = oneshot::channel();
 
     // Build a handle
     let handle = Some(Handle { close: handle_tx });
+    let ctrl_c = ctrl_c()?;
 
-    // Attempt to bind shutdown signals
-    let ctrl_c = tokio_signal::ctrl_c().map_err(emit_err_abort("Server setup failed"));
+    let server = async move {
+        let incoming = match config.bind.protocol {
+            Protocol::Udp => {
+                let server = udp::Server::bind(&addr).await?.build(receive);
 
-    let server = ctrl_c.and_then(move |ctrl_c| {
-        // Spawn a background task to process GELF payloads
-        let process = tokio::spawn(lazy(move || {
-            process_rx.for_each(move |msg| match process(msg) {
-                Ok(()) => {
-                    increment!(server.process_ok);
-
-                    Ok(())
-                }
-                Err(err) => {
-                    increment!(server.process_err);
-                    emit_err(&err, "GELF processing failed");
-
-                    Ok(())
-                }
-            })
-        }));
-
-        // Listen for a programmatic handle closing
-        let handle_closed = handle_rx.then(|_| Ok(Op::Shutdown)).into_stream();
-
-        // Listen for Ctrl + C and other termination signals
-        // from the OS
-        let ctrl_c = ctrl_c
-            .map(|_| Op::Shutdown)
-            .map_err(emit_err_abort("Server shutdown was unclean"));
-
-        let shutdown = ctrl_c.select(handle_closed);
-
-        // Accept and process incoming GELF messages over UDP
-        // This stream should never return an `Err` variant
-        let receive = incoming.then(|r| match r {
-            Ok(msg) => {
-                increment!(server.receive_ok);
-
-                Ok(Op::Receive(Some(msg)))
+                Either::Left(server)
             }
-            Err(err) => {
-                increment!(server.receive_err);
-                emit_err(&err, "GELF receiving failed");
+            Protocol::Tcp => {
+                let server = tcp::Server::bind(&addr)
+                    .await?
+                    .build(Duration::from_secs(config.tcp_keep_alive_secs), receive);
 
-                Ok(Op::Receive(None))
+                Either::Right(server)
             }
-        });
+        };
 
-        // Stich the UDP messages with shutdown messages
-        // Triggering an error here will cause the stream
-        // to terminate
-        let server = receive
-            .select(shutdown)
-            .and_then(|msg| match msg {
-                // Continue processing received messages
-                // Errors from receiving will be surfaced
-                // here as `Ok(None)`
-                Op::Receive(msg) => Ok(msg),
-                // Terminate on shutdown messages
-                // The error here causes the future to return
-                Op::Shutdown => {
+        let mut close = handle_rx.fuse();
+        let mut ctrl_c = ctrl_c.fuse();
+        let mut incoming = incoming.fuse();
+
+        // NOTE: We don't use `?` here because we never want to carry results
+        // We always want to match them and deal with error cases directly
+        loop {
+            select! {
+                // A message that's ready to process
+                msg = incoming.next() => match msg {
+                    // A complete message has been received
+                    Some(Ok(Received::Complete(msg))) => {
+                        increment!(server.receive_ok);
+
+                        // Process the received message
+                        match process(msg) {
+                            Ok(()) => {
+                                increment!(server.process_ok);
+                            }
+                            Err(err) => {
+                                increment!(server.process_err);
+                                emit_err(&err, "GELF processing failed");
+                            }
+                        }
+                    },
+                    // A chunk of a message has been received
+                    Some(Ok(Received::Incomplete)) => {
+                        continue;
+                    },
+                    // An error occurred receiving a chunk
+                    Some(Err(err)) => {
+                        increment!(server.receive_err);
+                        emit_err(&err, "GELF processing failed");
+                    },
+                    None => {
+                        unreachable!("receiver stream should never terminate")
+                    },
+                },
+                // A termination signal from the programmatic handle
+                _ = close => {
+                    emit("Handle closed; shutting down");
+                    break;
+                },
+                // A termination signal from the environment
+                _ = ctrl_c.next() => {
                     emit("Termination signal received; shutting down");
+                    break;
+                },
+            };
+        }
 
-                    Err(())
-                }
-            })
-            .filter_map(|msg| msg);
+        emit("Stopping GELF server");
 
-        // For each message, send it to the background for processing
-        // Since processing is synchronous we don't want to hold up
-        // the works here waiting for it.
-        server
-            .for_each(move |msg| {
-                process_tx
-                    .clone()
-                    .send(msg)
-                    .map(|_| ())
-                    .or_else(emit_err_continue("GELF buffering failed"))
-            })
-            // The `for_each` call won't return until either the
-            // UDP server is closed (which shouldn't happen) or
-            // a termination signal breaks the loop.
-            //
-            // If we get this far then the server is shutting down
-            // Wait for the message pipeline to terminate.
-            .then(|_| {
-                emit("Waiting for messages to finish processing");
-
-                process
-            })
-    });
+        Result::Ok::<(), Error>(())
+    };
 
     Ok(Server {
-        fut: Box::new(server),
+        fut: Box::pin(async move {
+            if let Err(err) = server.await {
+                emit_err(&err, "GELF server failed");
+            }
+        }),
         handle,
     })
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum Op {
-    Receive(Option<Message>),
-    Shutdown,
+enum Received {
+    Incomplete,
+    Complete(Message),
+}
+
+trait OptionMessageExt {
+    fn into_received(self) -> Option<Received>;
+}
+
+impl OptionMessageExt for Option<Message> {
+    fn into_received(self) -> Option<Received> {
+        match self {
+            Some(msg) => Some(Received::Complete(msg)),
+            None => Some(Received::Incomplete),
+        }
+    }
 }
 
 mod udp {
@@ -280,25 +269,28 @@ mod udp {
 
     use tokio::{
         codec::Decoder,
-        net::udp::{UdpFramed, UdpSocket},
+        net::udp::{
+            UdpFramed,
+            UdpSocket,
+        },
     };
 
     pub(super) struct Server(UdpSocket);
 
     impl Server {
-        pub(super) fn bind(addr: &SocketAddr) -> Result<Self, Error> {
-            let sock = UdpSocket::bind(&addr)?;
+        pub(super) async fn bind(addr: &SocketAddr) -> Result<Self, Error> {
+            let sock = UdpSocket::bind(&addr).await?;
 
             Ok(Server(sock))
         }
 
         pub(super) fn build(
             self,
-            receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static,
-        ) -> impl Stream<Item = Message, Error = Error> {
+            receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Unpin,
+        ) -> impl Stream<Item = Result<Received, Error>> {
             emit("Setting up for UDP");
 
-            UdpFramed::new(self.0, Decode(receive)).map(|(msg, _)| msg)
+            UdpFramed::new(self.0, Decode(receive)).map(|r| r.map(|(msg, _)| msg))
         }
     }
 
@@ -306,16 +298,16 @@ mod udp {
 
     impl<F> Decoder for Decode<F>
     where
-        F: FnMut(Bytes) -> Result<Option<Message>, Error>,
+        F: FnMut(Bytes) -> Result<Option<Message>, Error> + Unpin,
     {
-        type Item = Message;
+        type Item = Received;
         type Error = Error;
 
         fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
             // All datagrams are considered a valid message
             let src = src.take().freeze();
 
-            (self.0)(src)
+            Ok((self.0)(src)?.into_received())
         }
     }
 }
@@ -323,10 +315,29 @@ mod udp {
 mod tcp {
     use super::*;
 
-    use futures::stream::{futures_unordered::FuturesUnordered, Fuse, StreamFuture};
+    use std::pin::Pin;
+
+    use futures::{
+        future,
+        stream::{
+            futures_unordered::FuturesUnordered,
+            Fuse,
+            Stream,
+            StreamFuture,
+        },
+        task::{
+            Context,
+            Poll,
+        },
+    };
+
+    use pin_utils::unsafe_pinned;
 
     use tokio::{
-        codec::{Decoder, FramedRead},
+        codec::{
+            Decoder,
+            FramedRead,
+        },
         net::tcp::TcpListener,
         timer::Timeout,
     };
@@ -334,8 +345,8 @@ mod tcp {
     pub(super) struct Server(TcpListener);
 
     impl Server {
-        pub(super) fn bind(addr: &SocketAddr) -> Result<Self, Error> {
-            let listener = TcpListener::bind(&addr)?;
+        pub(super) async fn bind(addr: &SocketAddr) -> Result<Self, Error> {
+            let listener = TcpListener::bind(&addr).await?;
 
             Ok(Server(listener))
         }
@@ -343,17 +354,32 @@ mod tcp {
         pub(super) fn build(
             self,
             keep_alive: Duration,
-            receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + 'static + Clone,
-        ) -> impl Stream<Item = Message, Error = Error> {
+            receive: impl FnMut(Bytes) -> Result<Option<Message>, Error>
+                + Send
+                + Sync
+                + Unpin
+                + Clone
+                + 'static,
+        ) -> impl Stream<Item = Result<Received, Error>> {
             emit("Setting up for TCP");
 
             self.0
                 .incoming()
-                .map(move |conn| {
-                    let decode = Decode::new(receive.clone());
-                    let protocol = FramedRead::new(conn, decode);
+                .filter_map(move |conn| {
+                    match conn {
+                        // The connection was successfully established
+                        // Create a new protocol reader over it
+                        // It'll get added to the connection pool
+                        Ok(conn) => {
+                            let decode = Decode::new(receive.clone());
+                            let protocol = FramedRead::new(conn, decode);
 
-                    TimeoutStream::new(protocol, keep_alive)
+                            future::ready(Some(TimeoutStream::new(protocol, keep_alive)))
+                        }
+                        // The connection could not be established
+                        // Just ignore it
+                        Err(_) => future::ready(None),
+                    }
                 })
                 .listen(1024)
         }
@@ -363,56 +389,56 @@ mod tcp {
     where
         S: Stream,
         S::Item: Stream,
-        <S::Item as Stream>::Error: From<S::Error>,
     {
         stream: Fuse<S>,
         connections: FuturesUnordered<StreamFuture<S::Item>>,
         max: usize,
     }
 
-    impl<S> Stream for Listen<S>
+    impl<S> Listen<S>
     where
         S: Stream,
         S::Item: Stream,
-        <S::Item as Stream>::Error: From<S::Error>,
+    {
+        unsafe_pinned!(stream: Fuse<S>);
+        unsafe_pinned!(connections: FuturesUnordered<StreamFuture<S::Item>>);
+    }
+
+    impl<S> Stream for Listen<S>
+    where
+        S: Stream + Unpin,
+        S::Item: Stream + Unpin,
     {
         type Item = <S::Item as Stream>::Item;
-        type Error = <S::Item as Stream>::Error;
 
-        fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
             'poll_conns: loop {
                 // Fill up our accepted connections
                 'fill_conns: while self.connections.len() < self.max {
-                    let stream = match self.stream.poll()? {
-                        Async::Ready(Some(s)) => s.into_future(),
-                        Async::Ready(None) | Async::NotReady => break 'fill_conns,
+                    let stream = match self.as_mut().stream().poll_next(cx) {
+                        Poll::Ready(Some(s)) => s.into_future(),
+                        Poll::Ready(None) | Poll::Pending => break 'fill_conns,
                     };
 
-                    self.connections.push(stream.into_future());
+                    self.connections.push(stream);
                 }
 
                 // Try polling the stream
                 // NOTE: We're assuming the unordered list will
                 // always make forward progress polling futures
                 // even if one future is particularly chatty
-                match self.connections.poll() {
+                match self.as_mut().connections().poll_next(cx) {
                     // We have an item from a connection
-                    Ok(Async::Ready(Some((Some(item), stream)))) => {
+                    Poll::Ready(Some((Some(item), stream))) => {
                         self.connections.push(stream.into_future());
-                        return Ok(Async::Ready(Some(item)));
+                        return Poll::Ready(Some(item));
                     }
                     // A connection has closed
                     // Drop the stream and loop back
                     // This will mean attempting to accept a new connnection
-                    Ok(Async::Ready(Some((None, _stream)))) => continue 'poll_conns,
+                    Poll::Ready(Some((None, _stream))) => continue 'poll_conns,
                     // The queue is empty or nothing is ready
-                    Ok(Async::Ready(None)) | Ok(Async::NotReady) => break 'poll_conns,
-                    // An error occurred
-                    // Drop the stream, but return the error
-                    // FIXME: Some errors should be recoverable
-                    Err((err, _stream)) => {
-                        return Err(err);
-                    }
+                    Poll::Ready(None) | Poll::Pending => break 'poll_conns,
                 }
             }
 
@@ -420,9 +446,9 @@ mod tcp {
             // and nothing was ready, so figure out if we're not done yet  or if
             // we've reached the end.
             if self.stream.is_done() {
-                Ok(Async::Ready(None))
+                Poll::Ready(None)
             } else {
-                Ok(Async::NotReady)
+                Poll::Pending
             }
         }
     }
@@ -430,9 +456,8 @@ mod tcp {
     trait StreamListenExt: Stream {
         fn listen(self, max_connections: usize) -> Listen<Self>
         where
-            Self: Sized,
-            Self::Item: Stream,
-            <Self::Item as Stream>::Error: From<Self::Error>,
+            Self: Sized + Unpin,
+            Self::Item: Stream + Unpin,
         {
             Listen {
                 stream: self.fuse(),
@@ -444,7 +469,7 @@ mod tcp {
 
     impl<S> StreamListenExt for S where S: Stream {}
 
-    pub struct Decode<F> {
+    struct Decode<F> {
         next_index: usize,
         receive: F,
     }
@@ -462,7 +487,7 @@ mod tcp {
     where
         F: FnMut(Bytes) -> Result<Option<Message>, Error>,
     {
-        type Item = Message;
+        type Item = Received;
         type Error = Error;
 
         fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -474,11 +499,11 @@ mod tcp {
                 self.next_index = 0;
                 let src = src.split_to(sep_index + 1).freeze();
 
-                (self.receive)(src.slice_to(src.len() - 1))
+                Ok((self.receive)(src.slice_to(src.len() - 1))?.into_received())
             } else {
                 self.next_index = src.len();
 
-                Ok(None)
+                Ok(Some(Received::Incomplete))
             }
         }
 
@@ -492,7 +517,7 @@ mod tcp {
                         let src = src.take().freeze();
                         self.next_index = 0;
 
-                        (self.receive)(src)?
+                        (self.receive)(src)?.into_received()
                     }
                 }
             })
@@ -522,25 +547,30 @@ mod tcp {
         }
     }
 
+    impl<S> TimeoutStream<S> {
+        unsafe_pinned!(stream: Timeout<S>);
+    }
+
     impl<S> Stream for TimeoutStream<S>
     where
         S: Stream,
     {
         type Item = S::Item;
-        type Error = S::Error;
 
-        fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-            match self.stream.poll() {
-                Err(ref e) if e.is_elapsed() => {
+        fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+            match self.stream().poll_next(cx) {
+                // The timeout has elapsed
+                Poll::Ready(Some(Err(_))) => {
                     increment!(server.tcp_conn_timeout);
 
-                    Ok(Async::Ready(None))
-                },
-                Err(e) => match e.into_inner() {
-                    Some(e) => Err(e),
-                    None => Ok(Async::Ready(None)),
-                },
-                Ok(item) => Ok(item),
+                    Poll::Ready(None)
+                }
+                // The stream has produced an item
+                Poll::Ready(Some(Ok(item))) => Poll::Ready(Some(item)),
+                // The stream has completed
+                Poll::Ready(None) => Poll::Ready(None),
+                // The timeout hasn't elapsed and the stream hasn't produced an item
+                Poll::Pending => Poll::Pending,
             }
         }
     }

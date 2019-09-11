@@ -163,6 +163,7 @@ function Start-SeqEnvironment($protocol) {
         --network sqelf-test `
         -e SEQ_ADDRESS=http://sqelf-test-seq:5341 `
         -e GELF_ADDRESS="${protocol}://0.0.0.0:12201" `
+        -e GELF_ENABLE_DIAGNOSTICS="True" `
         -itd `
         -p "12202:${portArg}" `
         sqelf-ci:latest
@@ -224,7 +225,7 @@ function Invoke-TestApp($protocol) {
     if ($LASTEXITCODE) { exit 1 }
 
     # Give sqelf enough time to batch and send
-    Start-Sleep -Seconds 2
+    Start-Sleep -Seconds 5
 }
 
 function Check-ClefOutput {

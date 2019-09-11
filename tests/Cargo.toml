@@ -9,6 +9,9 @@ publish = false
 [dependencies.sqelf]
 path = "../sqelf"
 
+[dependencies.byteorder]
+version = "1.0"
+
 [dependencies.tokio]
 version = "0.1"
 

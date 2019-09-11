@@ -8,15 +8,10 @@ pub fn test() {
         ..net_chunks!({
             "host": "foo",
             "short_message": "bar"
-        }),
-        ..tcp_delim()
+        })
     ]);
 
-    server.receive(|received| {
-        assert_eq!("bar", received["@m"]);
-    });
-
-    assert_eq!(1, server.received());
+    assert_eq!(0, server.received());
 
     stream.close();
     server.close();
