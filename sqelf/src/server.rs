@@ -576,7 +576,7 @@ mod tcp {
                 Poll::Ready(Some(Ok(item))) => Poll::Ready(Some(item)),
                 // The stream has completed
                 Poll::Ready(None) => Poll::Ready(None),
-                // Tge timeout hasn't elapsed and the stream hasn't produced an item
+                // The timeout hasn't elapsed and the stream hasn't produced an item
                 Poll::Pending => Poll::Pending,
             }
         }
