@@ -225,7 +225,7 @@ function Invoke-TestApp($protocol) {
     if ($LASTEXITCODE) { exit 1 }
 
     # Give sqelf enough time to batch and send
-    Start-Sleep -Seconds 2
+    Start-Sleep -Seconds 5
 }
 
 function Check-ClefOutput {
