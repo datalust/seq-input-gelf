@@ -12,7 +12,9 @@ func main() {
         log.Fatalf("Failed to create UDP writer: %s", err)
     }
 
+    // Don't prefix messages with a redundant timestamp etc.
     log.SetFlags(0)
+    
     log.SetOutput(logger)
 
     log.Print("Hello, from go!")
