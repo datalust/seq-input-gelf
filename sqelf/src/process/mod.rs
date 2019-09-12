@@ -1,10 +1,14 @@
-mod clef;
+pub mod clef;
 mod gelf;
-mod str;
+pub mod str;
 
 use serde_json::Value;
 
-use self::str::{CachedString, Inlinable, Str};
+use self::str::{
+    CachedString,
+    Inlinable,
+    Str,
+};
 
 use crate::{
     error::Error,
@@ -12,6 +16,10 @@ use crate::{
 };
 
 use std::collections::HashMap;
+
+metrics! {
+    msg
+}
 
 /**
 Configuration for CELF formatting.
@@ -35,7 +43,7 @@ pub fn build(config: Config) -> Process {
 /**
 Process a raw message
 */
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Process {}
 
 impl Process {
@@ -43,11 +51,13 @@ impl Process {
         Process {}
     }
 
-    fn with_clef(
+    pub fn with_clef(
         &self,
         msg: impl MemRead,
         with: impl FnOnce(clef::Message) -> Result<(), Error>,
     ) -> Result<(), Error> {
+        increment!(process.msg);
+
         if let Some(bytes) = msg.bytes() {
             let value: gelf::Message<Str> = serde_json::from_slice(bytes)?;
 

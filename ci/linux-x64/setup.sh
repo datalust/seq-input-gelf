@@ -1,6 +1,6 @@
 #!/bin/bash
 
-RequiredRustToolchain="stable"
+RequiredRustToolchain=$RUST_TOOLCHAIN
 
 curl https://sh.rustup.rs -sSf | sh -s -- --default-host x86_64-unknown-linux-gnu --default-toolchain $RequiredRustToolchain -y
 

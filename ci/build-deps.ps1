@@ -67,13 +67,14 @@ function Invoke-LinuxBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    Run-Command -Exe cargo -ArgumentList 'build', '--release', '--target x86_64-unknown-linux-musl'
+    Run-Command -Exe cargo -ArgumentList 'build', '--bin sqelf', '--release', '--target x86_64-unknown-linux-musl'
 }
 function Invoke-LinuxTests
 {
     Write-BeginStep $MYINVOCATION
 
     Run-Command -Exe cargo -ArgumentList 'test', '--target x86_64-unknown-linux-musl'
+    Run-Command -Exe cargo -ArgumentList 'run', '-p sqelf_tests', '--target x86_64-unknown-linux-musl'
 }
 
 function Invoke-DockerBuild
@@ -88,13 +89,14 @@ function Invoke-WindowsBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    Run-Command -Exe cargo -ArgumentList 'build', '--release', '--target x86_64-pc-windows-msvc'
+    Run-Command -Exe cargo -ArgumentList 'build', '--bin sqelf', '--release', '--target x86_64-pc-windows-msvc'
 }
 function Invoke-WindowsTests
 {
     Write-BeginStep $MYINVOCATION
 
     Run-Command -Exe cargo -ArgumentList 'test', '--target x86_64-pc-windows-msvc'
+    Run-Command -Exe cargo -ArgumentList 'run', '-p sqelf_tests', '--target x86_64-pc-windows-msvc'
 }
 
 function Invoke-NuGetPack($version)
@@ -122,7 +124,7 @@ function Publish-Container($version)
     if ($LASTEXITCODE) { exit 1 }
 }
 
-function Start-SeqEnvironment {
+function Start-SeqEnvironment($protocol) {
     Write-BeginStep $MYINVOCATION
 
     Push-Location ci/smoke-test
@@ -140,6 +142,11 @@ function Start-SeqEnvironment {
         exit 1
     }
 
+    $portArg = "12201"
+    if ($protocol -eq "udp") {
+        $portArg = "12201/udp"
+    }
+
     docker pull datalust/seq:latest
     docker run --name sqelf-test-seq `
         --network sqelf-test `
@@ -155,8 +162,10 @@ function Start-SeqEnvironment {
     docker run --name sqelf-test-sqelf `
         --network sqelf-test `
         -e SEQ_ADDRESS=http://sqelf-test-seq:5341 `
+        -e GELF_ADDRESS="${protocol}://0.0.0.0:12201" `
+        -e GELF_ENABLE_DIAGNOSTICS="True" `
         -itd `
-        -p 12202:12201/udp `
+        -p "12202:${portArg}" `
         sqelf-ci:latest
     if ($LASTEXITCODE) {
         Pop-Location
@@ -204,19 +213,19 @@ function Build-TestAppContainer {
     if ($LASTEXITCODE) { exit 1 }
 }
 
-function Invoke-TestApp {
+function Invoke-TestApp($protocol) {
     Write-BeginStep $MYINVOCATION
 
     docker run `
         --rm `
         -i `
         --log-driver gelf `
-        --log-opt gelf-address=udp://localhost:12202 `
+        --log-opt "gelf-address=${protocol}://localhost:12202" `
         sqelf-app-test:latest
     if ($LASTEXITCODE) { exit 1 }
 
     # Give sqelf enough time to batch and send
-    Start-Sleep -Seconds 2
+    Start-Sleep -Seconds 5
 }
 
 function Check-ClefOutput {

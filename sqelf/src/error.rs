@@ -1,12 +1,15 @@
 use std::{
-    fmt,
     error,
-    any::Any,
+    fmt,
 };
 
-pub(crate) type StdError = Box<error::Error + Send + Sync>;
-
 pub struct Error(Inner);
+
+impl Error {
+    pub fn msg(msg: impl fmt::Display) -> Self {
+        err_msg(msg)
+    }
+}
 
 struct Inner(String);
 
@@ -34,9 +37,7 @@ impl fmt::Display for Inner {
     }
 }
 
-impl error::Error for Inner {
-
-}
+impl error::Error for Inner {}
 
 impl<E> From<E> for Error
 where
@@ -47,26 +48,20 @@ where
     }
 }
 
-impl From<Error> for StdError {
-    fn from(err: Error) -> StdError {
+impl From<Error> for Box<dyn error::Error + Send + Sync> {
+    fn from(err: Error) -> Box<dyn error::Error + Send + Sync> {
+        Box::new(err.0)
+    }
+}
+
+impl From<Error> for Box<dyn error::Error> {
+    fn from(err: Error) -> Box<dyn error::Error> {
         Box::new(err.0)
     }
 }
 
 pub(crate) fn err_msg(msg: impl fmt::Display) -> Error {
     Error(Inner(msg.to_string()))
-}
-
-pub(crate) fn unwrap_panic(panic: Box<dyn Any + Send + 'static>) ->  Error {
-    if let Some(err) = panic.downcast_ref::<&str>() {
-        return Error(Inner((*err).into()));
-    }
-
-    if let Some(err) = panic.downcast_ref::<String>() {
-        return Error(Inner((*err).clone()))
-    }
-
-    err_msg("unexpected panic (this is a bug)")
 }
 
 macro_rules! bail {

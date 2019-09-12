@@ -1,17 +1,42 @@
 use std::{
     cmp,
-    collections::{hash_map, BTreeMap, HashMap},
-    io::{self, Read},
-    time::{self, Duration, SystemTime},
+    collections::{
+        hash_map,
+        BTreeMap,
+        HashMap,
+    },
+    io::{
+        self,
+        Read,
+    },
+    time::{
+        self,
+        Duration,
+        SystemTime,
+    },
 };
 
-use bytes::{Buf, Bytes, IntoBuf};
-use libflate::{gzip, zlib};
+use bytes::{
+    Buf,
+    Bytes,
+    IntoBuf,
+};
+use libflate::{
+    gzip,
+    zlib,
+};
 
 use crate::{
     error::Error,
     io::MemRead,
 };
+
+metrics! {
+    chunk,
+    msg_chunked,
+    msg_unchunked,
+    overflow_incomplete_chunks
+}
 
 /**
 GELF receiver configuration.
@@ -46,7 +71,7 @@ impl Default for Config {
         Config {
             incomplete_capacity: 1024,
             max_chunks_per_message: 128,
-            incomplete_timeout_ms: 5 * 1000,
+            incomplete_timeout_ms: 5 * 1000, // 5 seconds
         }
     }
 }
@@ -65,14 +90,14 @@ A message may be chunked and compressed.
 This decoder won't attempt to validate that the contents
 of the message itself conforms to the GELF specification.
 */
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Gelf {
     config: Config,
     by_id: ById,
     by_arrival: ByArrival,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ById {
     chunks: HashMap<u64, (Chunks, UniqueTimestamp)>,
 }
@@ -85,7 +110,7 @@ impl ById {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ByArrival {
     counter: u64,
     chunks: BTreeMap<UniqueTimestamp, u64>,
@@ -132,11 +157,15 @@ impl Gelf {
         let magic = Message::peek_magic_bytes(&src);
 
         if magic == Some(Message::MAGIC_CHUNKED) {
+            increment!(receive.chunk);
+
             // Push a chunk onto a message
             // If the chunk completes the message then it
             // will be returned
             self.chunked(src)
         } else {
+            increment!(receive.msg_unchunked);
+
             // Return a message containing a single chunk
             Ok(Message::single(magic.and_then(Compression::detect), src))
         }
@@ -183,6 +212,8 @@ impl Gelf {
         // If we're past the threshold then drop *all* chunks,
         // whether they've expired or not.
         if self.by_id.chunks.len() >= self.config.incomplete_capacity {
+            increment!(receive.overflow_incomplete_chunks);
+
             self.by_id.chunks.clear();
             self.by_arrival.chunks.clear();
         }
@@ -236,6 +267,8 @@ impl Gelf {
                     let (_, (chunks, arrival)) = entry.remove_entry();
                     self.by_arrival.chunks.remove(&arrival);
 
+                    increment!(receive.msg_chunked);
+
                     Ok(Message::chunked(
                         chunks.inner.into_iter().map(|(_, chunk)| chunk),
                     ))
@@ -247,12 +280,13 @@ impl Gelf {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Chunks {
     expected_total: u8,
     inner: BTreeMap<u8, Bytes>,
 }
 
+#[derive(Debug, Clone)]
 struct Chunk {
     seq: u8,
     bytes: Bytes,
@@ -525,11 +559,20 @@ impl Compression {
 mod tests {
     use super::*;
 
-    use std::{io::Write, thread};
+    use std::{
+        io::Write,
+        thread,
+    };
 
-    use libflate::{gzip, zlib};
+    use libflate::{
+        gzip,
+        zlib,
+    };
 
-    use byteorder::{BigEndian, ByteOrder};
+    use byteorder::{
+        BigEndian,
+        ByteOrder,
+    };
 
     fn chunk(id: u64, seq_num: u8, seq_total: u8, bytes: &[u8]) -> Bytes {
         let mut header = vec![0x1e, 0x0f];
@@ -827,7 +870,7 @@ mod tests {
 
         gelf.decode(chunk(0, 0, 3, b"1"))
             .expect("failed to decode message");
-        
+
         gelf.decode(chunk(1, 0, 3, b"2"))
             .expect("failed to decode message");
 
