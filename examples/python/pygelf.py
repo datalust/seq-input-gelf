@@ -8,4 +8,4 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger()
 logger.addHandler(GelfUdpHandler(host='127.0.0.1', port=12201))
 
-logger.info('Hello, Seq+GELF!')
+logger.info('Hello, from Python!')
