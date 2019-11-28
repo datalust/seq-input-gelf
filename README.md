@@ -1,6 +1,6 @@
 # `sqelf` [![Build status](https://ci.appveyor.com/api/projects/status/t32q67tvbvsgjxck?svg=true)](https://ci.appveyor.com/project/datalust/sqelf) [![Seq.Input.Gelf](https://img.shields.io/nuget/v/Seq.Input.Gelf.svg?style=flat)](https://nuget.org/packages/Seq.Input.Gelf) [![datalust/sqelf](https://img.shields.io/badge/docker-datalust%2Fsqelf-yellowgreen.svg)](https://hub.docker.com/r/datalust/sqelf)
 
-Ingest [Graylog Extended Log Format (GELF) messages](http://docs.graylog.org/en/2.5/pages/gelf.html) via UDP into [Seq](https://datalust.co/seq). The app is packaged both as a plug-in Seq App for all platforms, and as a standalone Docker container that forwards events to Seq via its HTTP API.
+Ingest [Graylog Extended Log Format (GELF) messages](http://docs.graylog.org/en/2.5/pages/gelf.html) via UDP or TCP into [Seq](https://datalust.co/seq). The app is packaged both as a plug-in Seq App for all platforms, and as a standalone Docker container that forwards events to Seq via its HTTP API.
 
 ## Getting started on Windows (requires Seq 5.1+)
 
@@ -32,7 +32,7 @@ Events ingested by the input will be associated with the default _None_ [API key
 
 ## Getting started with Docker (all versions)
 
-For Docker, the app is deployed as a Docker container that is expected to run alongside the Seq container. The `datalust/sqelf` container accepts UDP GELF payloads on port 12201, and forwards them to the Seq ingestion endpoint specified in the `SEQ_ADDRESS` environment variable.
+For Docker, the app is deployed as a Docker container that is expected to run alongside the Seq container. The `datalust/sqelf` container accepts GELF messages (via UDP on port 12201 by default), and forwards them to the Seq ingestion endpoint specified in the `SEQ_ADDRESS` environment variable.
 
 To run the container:
 
