@@ -3,23 +3,26 @@
 extern crate sqelf;
 
 use sqelf::{
-    config::{self, Config},
-    receive,
-    process,
+    config::{
+        self,
+        Config,
+    },
     diagnostics::{
         self,
         emit,
         emit_err,
     },
     error::Error,
+    process,
+    receive,
     server,
 };
 
 use std::{
+    any::Any,
     io::Read,
     panic::catch_unwind,
     thread,
-    any::Any,
 };
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
