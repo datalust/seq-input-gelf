@@ -35,7 +35,7 @@ metrics! {
     chunk,
     msg_chunked,
     msg_unchunked,
-    overflow_incomplete_chunks
+    msg_incomplete_chunk_overflow
 }
 
 /**
@@ -212,7 +212,7 @@ impl Gelf {
         // If we're past the threshold then drop *all* chunks,
         // whether they've expired or not.
         if self.by_id.chunks.len() >= self.config.incomplete_capacity {
-            increment!(receive.overflow_incomplete_chunks);
+            increment!(receive.msg_incomplete_chunk_overflow);
 
             self.by_id.chunks.clear();
             self.by_arrival.chunks.clear();

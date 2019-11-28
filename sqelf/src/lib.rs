@@ -13,11 +13,11 @@ pub mod diagnostics;
 #[macro_use]
 pub mod error;
 
+pub mod config;
 pub mod io;
 pub mod process;
 pub mod receive;
 pub mod server;
-pub mod config;
 
 pub use self::{
     config::Config,

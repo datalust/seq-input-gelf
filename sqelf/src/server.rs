@@ -38,7 +38,8 @@ metrics! {
     process_err,
     tcp_conn_accept,
     tcp_conn_close,
-    tcp_conn_timeout
+    tcp_conn_timeout,
+    tcp_msg_overflow
 }
 
 /**
@@ -57,6 +58,10 @@ pub struct Config {
     then the connection will be closed.
     */
     pub tcp_keep_alive_secs: u64,
+    /**
+    The maximum size of a single event before it'll be discarded.
+    */
+    pub tcp_max_size_bytes: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -99,7 +104,8 @@ impl Default for Config {
                 addr: "0.0.0.0:12201".to_owned(),
                 protocol: Protocol::Udp,
             },
-            tcp_keep_alive_secs: 2 * 60, // 2 minutes
+            tcp_keep_alive_secs: 2 * 60,    // 2 minutes
+            tcp_max_size_bytes: 1024 * 256, // 256kiB
         }
     }
 }
@@ -172,9 +178,11 @@ pub fn build(
                 Either::Left(server)
             }
             Protocol::Tcp => {
-                let server = tcp::Server::bind(&addr)
-                    .await?
-                    .build(Duration::from_secs(config.tcp_keep_alive_secs), receive);
+                let server = tcp::Server::bind(&addr).await?.build(
+                    Duration::from_secs(config.tcp_keep_alive_secs),
+                    config.tcp_max_size_bytes as usize,
+                    receive,
+                );
 
                 Either::Right(server)
             }
@@ -315,7 +323,10 @@ mod udp {
 mod tcp {
     use super::*;
 
-    use std::pin::Pin;
+    use std::{
+        cmp,
+        pin::Pin,
+    };
 
     use futures::{
         future,
@@ -354,6 +365,7 @@ mod tcp {
         pub(super) fn build(
             self,
             keep_alive: Duration,
+            max_size_bytes: usize,
             receive: impl FnMut(Bytes) -> Result<Option<Message>, Error>
                 + Send
                 + Sync
@@ -371,9 +383,13 @@ mod tcp {
                         // Create a new protocol reader over it
                         // It'll get added to the connection pool
                         Ok(conn) => {
-                            let decode = Decode::new(receive.clone());
+                            let decode = Decode::new(max_size_bytes, receive.clone());
                             let protocol = FramedRead::new(conn, decode);
 
+                            // NOTE: The timeout stream wraps _the protocol_
+                            // That means it'll close the connection if it doesn't
+                            // produce a valid message within the timeframe, not just
+                            // whether or not it writes to the stream
                             future::ready(Some(TimeoutStream::new(protocol, keep_alive)))
                         }
                         // The connection could not be established
@@ -390,7 +406,7 @@ mod tcp {
         S: Stream,
         S::Item: Stream,
     {
-        stream: Fuse<S>,
+        accept: Fuse<S>,
         connections: FuturesUnordered<StreamFuture<S::Item>>,
         max: usize,
     }
@@ -400,27 +416,27 @@ mod tcp {
         S: Stream,
         S::Item: Stream,
     {
-        unsafe_pinned!(stream: Fuse<S>);
+        unsafe_pinned!(accept: Fuse<S>);
         unsafe_pinned!(connections: FuturesUnordered<StreamFuture<S::Item>>);
     }
 
-    impl<S> Stream for Listen<S>
+    impl<S, T> Stream for Listen<S>
     where
         S: Stream + Unpin,
-        S::Item: Stream + Unpin,
+        S::Item: Stream<Item = Result<T, Error>> + Unpin,
     {
-        type Item = <S::Item as Stream>::Item;
+        type Item = Result<T, Error>;
 
         fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
             'poll_conns: loop {
                 // Fill up our accepted connections
                 'fill_conns: while self.connections.len() < self.max {
-                    let stream = match self.as_mut().stream().poll_next(cx) {
+                    let conn = match self.as_mut().accept().poll_next(cx) {
                         Poll::Ready(Some(s)) => s.into_future(),
                         Poll::Ready(None) | Poll::Pending => break 'fill_conns,
                     };
 
-                    self.connections.push(stream);
+                    self.connections.push(conn);
                 }
 
                 // Try polling the stream
@@ -429,14 +445,27 @@ mod tcp {
                 // even if one future is particularly chatty
                 match self.as_mut().connections().poll_next(cx) {
                     // We have an item from a connection
-                    Poll::Ready(Some((Some(item), stream))) => {
-                        self.connections.push(stream.into_future());
-                        return Poll::Ready(Some(item));
+                    Poll::Ready(Some((Some(item), conn))) => {
+                        match item {
+                            // A valid item was produced
+                            // Return it and put the connection back in the pool.
+                            Ok(item) => {
+                                self.connections.push(conn.into_future());
+
+                                return Poll::Ready(Some(Ok(item)));
+                            }
+                            // An error occurred, probably IO-related
+                            // In this case the connection isn't returned to the pool.
+                            // It's closed on drop and the error is returned.
+                            Err(err) => {
+                                return Poll::Ready(Some(Err(err.into())));
+                            }
+                        }
                     }
                     // A connection has closed
-                    // Drop the stream and loop back
-                    // This will mean attempting to accept a new connnection
-                    Poll::Ready(Some((None, _stream))) => continue 'poll_conns,
+                    // Drop the connection and loop back
+                    // This will mean attempting to accept a new connection
+                    Poll::Ready(Some((None, _conn))) => continue 'poll_conns,
                     // The queue is empty or nothing is ready
                     Poll::Ready(None) | Poll::Pending => break 'poll_conns,
                 }
@@ -445,7 +474,7 @@ mod tcp {
             // If we've gotten this far, then there are no events for us to process
             // and nothing was ready, so figure out if we're not done yet  or if
             // we've reached the end.
-            if self.stream.is_done() {
+            if self.accept.is_done() {
                 Poll::Ready(None)
             } else {
                 Poll::Pending
@@ -460,7 +489,7 @@ mod tcp {
             Self::Item: Stream + Unpin,
         {
             Listen {
-                stream: self.fuse(),
+                accept: self.fuse(),
                 connections: FuturesUnordered::new(),
                 max: max_connections,
             }
@@ -470,14 +499,18 @@ mod tcp {
     impl<S> StreamListenExt for S where S: Stream {}
 
     struct Decode<F> {
-        next_index: usize,
+        max_size_bytes: usize,
+        read_head: usize,
+        discarding: bool,
         receive: F,
     }
 
     impl<F> Decode<F> {
-        pub fn new(receive: F) -> Self {
+        pub fn new(max_size_bytes: usize, receive: F) -> Self {
             Decode {
-                next_index: 0,
+                read_head: 0,
+                discarding: false,
+                max_size_bytes,
                 receive,
             }
         }
@@ -491,19 +524,78 @@ mod tcp {
         type Error = Error;
 
         fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-            // Messages are separated by null bytes
-            let sep_offset = src[self.next_index..].iter().position(|b| *b == b'\0');
+            'read_frame: loop {
+                let read_to = cmp::min(self.max_size_bytes.saturating_add(1), src.len());
 
-            if let Some(offset) = sep_offset {
-                let sep_index = offset + self.next_index;
-                self.next_index = 0;
-                let src = src.split_to(sep_index + 1).freeze();
+                // Messages are separated by null bytes
+                let sep_offset = src[self.read_head..].iter().position(|b| *b == b'\0');
 
-                Ok((self.receive)(src.slice_to(src.len() - 1))?.into_received())
-            } else {
-                self.next_index = src.len();
+                match (self.discarding, sep_offset) {
+                    // A delimiter was found
+                    // Split it from the buffer and return
+                    (false, Some(offset)) => {
+                        let frame_end = offset + self.read_head;
 
-                Ok(Some(Received::Incomplete))
+                        // The message is technically sitting right there
+                        // for us, but since it's bigger than our max capacity
+                        // we still discard it
+                        if frame_end > self.max_size_bytes {
+                            increment!(server.tcp_msg_overflow);
+
+                            self.discarding = true;
+
+                            continue 'read_frame;
+                        }
+
+                        self.read_head = 0;
+                        let src = src.split_to(frame_end + 1).freeze();
+
+                        return Ok((self.receive)(src.slice_to(src.len() - 1))?.into_received());
+                    }
+                    // A delimiter wasn't found, but the incomplete
+                    // message is too big. Start discarding the input
+                    (false, None) if src.len() > self.max_size_bytes => {
+                        increment!(server.tcp_msg_overflow);
+
+                        self.discarding = true;
+
+                        continue 'read_frame;
+                    }
+                    // A delimiter wasn't found
+                    // Move the read head forward so we'll check
+                    // from that position next time data arrives
+                    (false, None) => {
+                        self.read_head = read_to;
+
+                        // As per the contract of `Decoder`, we return `None`
+                        // here to indicate more data is needed to complete a frame
+                        return Ok(None);
+                    }
+                    // We're discarding input and have reached the end of the message
+                    // Advance the source buffer to the end of that message and try again
+                    (true, Some(offset)) => {
+                        src.advance(offset + self.read_head + 1);
+                        self.discarding = false;
+                        self.read_head = 0;
+
+                        continue 'read_frame;
+                    }
+                    // We're discarding input but haven't reached the end of the message yet
+                    (true, None) => {
+                        src.advance(read_to);
+                        self.read_head = 0;
+
+                        if src.is_empty() {
+                            // We still return `Ok` here, even though we have no intention
+                            // of processing those bytes. Our maximum buffer size should still
+                            // be limited by the initial capacity, since we're responsible for
+                            // reserving additional capacity and aren't doing that
+                            return Ok(None);
+                        }
+
+                        continue 'read_frame;
+                    }
+                }
             }
         }
 
@@ -515,7 +607,7 @@ mod tcp {
                         None
                     } else {
                         let src = src.take().freeze();
-                        self.next_index = 0;
+                        self.read_head = 0;
 
                         (self.receive)(src)?.into_received()
                     }
