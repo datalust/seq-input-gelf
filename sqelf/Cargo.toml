@@ -6,14 +6,14 @@ edition = "2018"
 license = "Apache-2.0"
 
 [dependencies.futures-preview]
-version = "0.3.0-alpha.18"
-features = ["nightly", "async-await"]
+version = "0.3.0-alpha.19"
+features = ["async-await"]
 
 [dependencies.pin-utils]
 version = "0.1.0-alpha.4"
 
 [dependencies.tokio]
-version = "0.2.0-alpha.4"
+version = "0.2.0-alpha.6"
 features = ["signal"]
 
 [dependencies.bytes]

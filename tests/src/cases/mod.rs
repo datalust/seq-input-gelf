@@ -8,5 +8,12 @@ cases! {
     tcp_simple,
     tcp_invalid,
     tcp_partial,
-    tcp_chunked_simple
+    tcp_huge,
+    tcp_overflow,
+    tcp_overflow_huge,
+    tcp_chunked_simple,
+    tcp_multiple_frames,
+    tcp_multiple_frames_single_write,
+    tcp_multiple_conns,
+    tcp_multiple_conns_partial
 }
