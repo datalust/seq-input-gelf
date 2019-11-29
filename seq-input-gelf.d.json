@@ -1,7 +1,7 @@
 {
     "$schema": "https://getseq.net/schema/app-definition/v3",
     "name": "GELF Input",
-    "description": "Accept Graylog Extended Log Format (GELF) payloads over UDP. Requires Seq 5.1+.",
+    "description": "Ingest Graylog Extended Log Format (GELF) payloads over TCP or UDP. Requires Seq 5.1+.",
     "capabilities": ["input"],
     "platform": {
       "win-x64": {
@@ -14,13 +14,13 @@
     "settings": {
       "gelfAddress": {
         "displayName": "GELF address",
-        "helpText": "The url (protocol, IP address and port) on which the input will listen for GELF payloads. The default is `udp://0.0.0.0:12201`. Specifying the protocol as `tcp` will listen on TCP instead of UDP. TCP support is experimental and is not suitable for direct internet-facing workloads.",
+        "helpText": "The url (protocol, IP address and port) on which the input will listen for GELF payloads. The default is `udp://0.0.0.0:12201`. Specifying the protocol as `tcp` will listen on TCP instead of UDP.",
         "isOptional": true
       },
       "enableDiagnostics": {
         "inputType": "Checkbox",
         "displayName": "Enable diagnostics",
-        "helpText": "Controls the verbosity of diagnostic logs produced by the server. When enabled metrics will be regularly sampled",
+        "helpText": "Controls the verbosity of diagnostic logs produced by the server. When enabled metrics will be regularly sampled and written back to Seq.",
         "isOptional": true
       }
     }
