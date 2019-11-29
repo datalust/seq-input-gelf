@@ -5,7 +5,7 @@
     <version>$version$</version>
     <authors>Datalust and Contributors</authors>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <description>Receive GELF event payloads via UDP.</description>
+    <description>Ingest GELF event payloads over TCP or UDP.</description>
     <language>en-US</language>
     <projectUrl>https://github.com/datalust/sqelf</projectUrl>
     <licenseUrl>http://www.apache.org/licenses/LICENSE-2.0</licenseUrl>
