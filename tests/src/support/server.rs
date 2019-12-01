@@ -24,12 +24,14 @@ use super::SERVER_BIND;
 
 pub struct Builder {
     tcp_max_size_bytes: u64,
+    tcp_keep_alive_secs: u64,
 }
 
 impl Builder {
     fn new() -> Self {
         Builder {
             tcp_max_size_bytes: 512,
+            tcp_keep_alive_secs: 10,
         }
     }
 
@@ -38,26 +40,29 @@ impl Builder {
         self
     }
 
-    pub fn udp(self) -> Server {
+    pub fn tcp_keep_alive_secs(mut self, v: u64) -> Self {
+        self.tcp_keep_alive_secs = v;
+        self
+    }
+
+    fn build(self, protocol: server::Protocol) -> Server {
         Server::new(server::Config {
             bind: server::Bind {
                 addr: SERVER_BIND.into(),
-                protocol: server::Protocol::Udp,
+                protocol,
             },
             tcp_max_size_bytes: self.tcp_max_size_bytes,
+            tcp_keep_alive_secs: self.tcp_keep_alive_secs,
             ..Default::default()
         })
     }
 
+    pub fn udp(self) -> Server {
+        self.build(server::Protocol::Udp)
+    }
+
     pub fn tcp(self) -> Server {
-        Server::new(server::Config {
-            bind: server::Bind {
-                addr: SERVER_BIND.into(),
-                protocol: server::Protocol::Tcp,
-            },
-            tcp_max_size_bytes: self.tcp_max_size_bytes,
-            ..Default::default()
-        })
+        self.build(server::Protocol::Tcp)
     }
 }
 

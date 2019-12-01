@@ -15,5 +15,7 @@ cases! {
     tcp_multiple_frames,
     tcp_multiple_frames_single_write,
     tcp_multiple_conns,
-    tcp_multiple_conns_partial
+    tcp_multiple_conns_partial,
+    tcp_timeout_partial,
+    tcp_timeout_slow
 }
