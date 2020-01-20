@@ -30,7 +30,6 @@ impl Stream {
     }
 
     pub fn close(self) {
-        let _ = self.inner
-            .shutdown(net::Shutdown::Both);
+        let _ = self.inner.shutdown(net::Shutdown::Both);
     }
 }

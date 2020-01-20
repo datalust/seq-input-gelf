@@ -1,14 +1,12 @@
-use std::{
-    net::SocketAddr,
-};
+use std::net::SocketAddr;
 
 use crate::{
     diagnostics::*,
     error::Error,
     receive::Message,
     server::{
-        Received,
         OptionMessageExt,
+        Received,
     },
 };
 
@@ -17,7 +15,10 @@ use bytes::{
     BytesMut,
 };
 
-use futures::{Stream, StreamExt};
+use futures::{
+    Stream,
+    StreamExt,
+};
 
 use tokio::net::UdpSocket;
 
