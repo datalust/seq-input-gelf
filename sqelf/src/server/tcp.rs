@@ -1,8 +1,8 @@
 use std::{
-    io,
     cmp,
-    pin::Pin,
+    io,
     net::SocketAddr,
+    pin::Pin,
     time::Duration,
 };
 
@@ -11,15 +11,15 @@ use crate::{
     error::Error,
     receive::Message,
     server::{
-        Received,
         OptionMessageExt,
+        Received,
     },
 };
 
 use bytes::{
+    Buf,
     Bytes,
     BytesMut,
-    Buf,
 };
 
 use futures::{
@@ -31,8 +31,8 @@ use futures::{
         futures_unordered::FuturesUnordered,
         Fuse,
         Stream,
-        StreamFuture,
         StreamExt,
+        StreamFuture,
     },
     task::{
         Context,
@@ -53,11 +53,9 @@ use tokio::{
     },
 };
 
-use tokio_util::{
-    codec::{
-        Decoder,
-        FramedRead,
-    }
+use tokio_util::codec::{
+    Decoder,
+    FramedRead,
 };
 
 pub(super) struct Server(TcpIncoming);

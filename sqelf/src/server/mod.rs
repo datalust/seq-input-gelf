@@ -15,14 +15,12 @@ use futures::{
 };
 
 use tokio::{
-    signal::ctrl_c,
     runtime::Runtime,
+    signal::ctrl_c,
     sync::oneshot,
 };
 
-use bytes::{
-    Bytes,
-};
+use bytes::Bytes;
 
 use crate::{
     diagnostics::*,
