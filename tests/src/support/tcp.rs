@@ -30,8 +30,6 @@ impl Stream {
     }
 
     pub fn close(self) {
-        self.inner
-            .shutdown(net::Shutdown::Both)
-            .expect("failed to close connection");
+        let _ = self.inner.shutdown(net::Shutdown::Both);
     }
 }

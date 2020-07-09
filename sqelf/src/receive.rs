@@ -19,7 +19,6 @@ use std::{
 use bytes::{
     Buf,
     Bytes,
-    IntoBuf,
 };
 use libflate::{
     gzip,
@@ -354,11 +353,11 @@ impl ChunkHeader {
             bail!("buffer is too small to contain a valid chunk header")
         }
 
-        let mut buf = buf.split_to(Self::SIZE).into_buf();
+        let mut buf = buf.split_to(Self::SIZE);
 
         let _magic = [buf.get_u8(), buf.get_u8()];
 
-        let id = buf.get_u64_be();
+        let id = buf.get_u64();
         let seq_num = buf.get_u8();
         let seq_count = buf.get_u8();
 

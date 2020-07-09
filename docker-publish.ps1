@@ -9,7 +9,7 @@ $major = $versionParts[0]
 $minor = $versionParts[1]
 
 $baseImage = "datalust/sqelf-ci:$version"
-$publishImages = "datalust/sqelf:latest", "datalust/sqelf:$major", "datalust/sqelf:$major.$minor", "datalust/sqelf:$version"
+$publishImages = "datalust/sqelf:latest", "datalust/sqelf:$major", "datalust/sqelf:$major.$minor", "datalust/sqelf:$version, datalust/seq-input-gelf:latest", "datalust/seq-input-gelf:$major", "datalust/seq-input-gelf:$major.$minor", "datalust/seq-input-gelf:$version"
 
 $choices  = "&Yes", "&No"
 $decision = $Host.UI.PromptForChoice("Publishing ($baseImage) as ($publishImages)", "Does this look right?", $choices, 1)
