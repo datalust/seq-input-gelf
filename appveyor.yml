@@ -32,7 +32,7 @@ for:
   deploy:
   - provider: NuGet
     api_key:
-      secure: FzT5qSphdolME7e5dRSOUptmfdN2sw61jhHxgfH5sUlPIMBT0/5Rw05NB2oKXPLz
+      secure: gRL1ZmG6IDSd0EBrcxbjnqozW8wx932bi9tAg1BnNmL58iVkUdVi19TYXrsKGrQ8
     skip_symbols: true
     artifact: /Seq.Input.Gelf.*\.nupkg/
     on:
