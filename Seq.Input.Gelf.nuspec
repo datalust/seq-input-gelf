@@ -9,7 +9,7 @@
     <language>en-US</language>
     <projectUrl>https://github.com/datalust/sqelf</projectUrl>
     <licenseUrl>http://www.apache.org/licenses/LICENSE-2.0</licenseUrl>
-    <iconUrl>https://raw.githubusercontent.com/datalust/sqelf/master/asset/seq-input-gelf.png</iconUrl>
+    <iconUrl>https://raw.githubusercontent.com/datalust/sqelf/release/asset/seq-input-gelf.png</iconUrl>
     <tags>seq-app</tags>
   </metadata>
   <files>

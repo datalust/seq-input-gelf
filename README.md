@@ -6,7 +6,7 @@ Ingest [Graylog Extended Log Format (GELF) messages](http://docs.graylog.org/en/
 
 On Windows, the GELF input is installed into Seq as a [Seq App](https://docs.getseq.net/docs/installing-seq-apps).
 
-![Seq GELF input](https://raw.githubusercontent.com/datalust/sqelf/master/asset/app-screenshot.png)
+![Seq GELF input](https://raw.githubusercontent.com/datalust/sqelf/release/asset/app-screenshot.png)
 
 **1. Install the app package**
 
