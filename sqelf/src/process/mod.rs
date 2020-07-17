@@ -15,7 +15,10 @@ use crate::{
     io::MemRead,
 };
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    io::Read,
+};
 
 metrics! {
     msg
@@ -25,11 +28,19 @@ metrics! {
 Configuration for CELF formatting.
 */
 #[derive(Debug, Clone)]
-pub struct Config {}
+pub struct Config {
+    /**
+    Whether or not to buffer and include the raw GELF payload
+    in the event message.
+    */
+    pub include_raw_payload: bool,
+}
 
 impl Default for Config {
     fn default() -> Self {
-        Config {}
+        Config {
+            include_raw_payload: false,
+        }
     }
 }
 
@@ -44,11 +55,15 @@ pub fn build(config: Config) -> Process {
 Process a raw message
 */
 #[derive(Debug, Clone)]
-pub struct Process {}
+pub struct Process {
+    include_raw_payload: bool,
+}
 
 impl Process {
-    pub fn new(_: Config) -> Self {
-        Process {}
+    pub fn new(config: Config) -> Self {
+        Process {
+            include_raw_payload: config.include_raw_payload,
+        }
     }
 
     pub fn with_clef(
@@ -59,12 +74,29 @@ impl Process {
         increment!(process.msg);
 
         if let Some(bytes) = msg.bytes() {
-            let value: gelf::Message<Str> = serde_json::from_slice(bytes)?;
+            let mut value: gelf::Message<Str> = serde_json::from_slice(bytes)?;
+
+            if self.include_raw_payload {
+                value.add(
+                    "raw_payload",
+                    Value::String(String::from_utf8_lossy(bytes).into_owned()),
+                );
+            }
 
             with(value.to_clef())
         } else {
-            let value: gelf::Message<Inlinable<CachedString>, String> =
-                serde_json::from_reader(msg.into_reader()?)?;
+            let value = if self.include_raw_payload {
+                let mut payload = String::new();
+                msg.into_reader()?.read_to_string(&mut payload)?;
+
+                let mut value: gelf::Message<Inlinable<CachedString>, String> =
+                    serde_json::from_str(&payload)?;
+                value.add("raw_payload", Value::String(payload));
+
+                value
+            } else {
+                serde_json::from_reader(msg.into_reader()?)?
+            };
 
             with(value.to_clef())
         }
@@ -206,6 +238,22 @@ where
         }
     }
 
+    fn add(&mut self, k: &str, v: Value) -> bool {
+        use serde_json::map::Entry;
+
+        match self.additional {
+            Some(Value::Object(ref mut additional)) => {
+                if let Entry::Vacant(vacant) = additional.entry(k) {
+                    vacant.insert(v);
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
+
     fn additional(&self) -> Option<impl IntoIterator<Item = (&str, &Value)>> {
         match self.additional {
             Some(Value::Object(ref additional)) => Some(additional.iter().map(|(k, v)| {
@@ -312,6 +360,49 @@ mod tests {
                     "image_id": "abcdefghijklmnopqrstuv",
                     "tag": "latest",
                     "host": "example.org"
+                });
+
+                let clef = serde_json::to_value(&clef).expect("failed to read clef");
+
+                assert_eq!(expected, clef);
+
+                Ok(())
+            })
+            .expect("failed to read gelf event");
+    }
+
+    #[test]
+    fn include_raw_payload() {
+        let gelf = json!({
+            "version": "1.1",
+            "host": "example.org",
+            "short_message": "A short message that helps you identify what is going on",
+            "full_message": "Backtrace here",
+            "timestamp": 1385053862.3072,
+            "level": 1,
+            "_user_id": 9001,
+            "_some_info": "foo",
+            "_some_env_var": "bar"
+        });
+
+        let process = Process::new(Config { include_raw_payload: true, ..Default::default() });
+
+        process
+            .with_clef(gelf.to_string().as_bytes(), |clef| {
+                if let Str::Owned(_) = clef.message.as_ref().expect("missing message") {
+                    panic!("expected a borrowed message string");
+                }
+
+                let expected = json!({
+                    "@t": "2013-11-21T17:11:02.307000000Z",
+                    "@l": "alert",
+                    "@m": "A short message that helps you identify what is going on",
+                    "@x": "Backtrace here",
+                    "some_env_var": "bar",
+                    "some_info": "foo",
+                    "user_id": 9001,
+                    "host": "example.org",
+                    "raw_payload": gelf.to_string()
                 });
 
                 let clef = serde_json::to_value(&clef).expect("failed to read clef");

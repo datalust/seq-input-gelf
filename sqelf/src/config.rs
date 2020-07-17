@@ -38,6 +38,7 @@ impl Config {
         };
         if is_truthy(enable_diagnostics)? {
             config.diagnostics.min_level = diagnostics::Level::Debug;
+            config.process.include_raw_payload = true;
         }
 
         Ok(config)
