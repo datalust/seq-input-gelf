@@ -55,6 +55,7 @@ A `seq-input-gelf` container can be configured using the following environment v
 | -------- | ----------- | ------- |
 | `SEQ_ADDRESS`| The address of the Seq server to forward events to | `http://localhost:5341` |
 | `SEQ_API_KEY` | The API key to use | - |
+| `SEQ_API_KEY_FILE` | A file from which to read the API key to use. If the file exists, content will overwrite the `SEQ_API_KEY` variable | - |
 | `GELF_ADDRESS` | The address to bind the GELF server to. The protocol may be `udp` or `tcp` | `udp://0.0.0.0:12201` |
 | `GELF_ENABLE_DIAGNOSTICS` | Whether to enable diagnostic logs and metrics (accepts `True` or `False`) | `False` |
 
