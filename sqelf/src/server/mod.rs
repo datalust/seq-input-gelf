@@ -20,11 +20,12 @@ use tokio::{
     sync::oneshot,
 };
 
+use anyhow::Error;
+
 use bytes::Bytes;
 
 use crate::{
     diagnostics::*,
-    error::Error,
     receive::Message,
 };
 

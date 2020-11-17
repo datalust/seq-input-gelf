@@ -26,7 +26,7 @@ use libflate::{
 };
 
 use crate::{
-    error::Error,
+    Error,
     io::MemRead,
 };
 

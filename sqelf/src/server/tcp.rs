@@ -8,13 +8,14 @@ use std::{
 
 use crate::{
     diagnostics::*,
-    error::Error,
     receive::Message,
     server::{
         OptionMessageExt,
         Received,
     },
 };
+
+use anyhow::Error;
 
 use bytes::{
     Buf,

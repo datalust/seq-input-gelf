@@ -11,7 +11,7 @@ use self::str::{
 };
 
 use crate::{
-    error::Error,
+    Error,
     io::MemRead,
 };
 
