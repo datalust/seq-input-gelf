@@ -1,7 +1,4 @@
-use crate::error::{
-    err_msg,
-    Error,
-};
+use crate::Error;
 use chrono::{
     DateTime,
     Utc,
@@ -117,7 +114,7 @@ impl Diagnostics {
 
             handle
                 .join()
-                .map_err(|_| err_msg("failed to join diagnostics handle"))?;
+                .map_err(|_| anyhow!("failed to join diagnostics handle"))?;
         }
 
         Ok(())
@@ -145,7 +142,7 @@ impl FromStr for Level {
         match s {
             "DEBUG" => Ok(Level::Debug),
             "ERROR" => Ok(Level::Error),
-            _ => Err(err_msg("expected `DEBUG` or `ERROR`")),
+            _ => Err(anyhow!("expected `DEBUG` or `ERROR`")),
         }
     }
 }

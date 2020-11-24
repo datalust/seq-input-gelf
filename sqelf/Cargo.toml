@@ -52,3 +52,6 @@ features = ["serde"]
 
 [dependencies.lazy_static]
 version = "1"
+
+[dependencies.anyhow]
+version = "1"

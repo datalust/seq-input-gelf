@@ -11,7 +11,7 @@ use self::str::{
 };
 
 use crate::{
-    error::Error,
+    Error,
     io::MemRead,
 };
 
@@ -74,14 +74,20 @@ impl Process {
         increment!(process.msg);
 
         if let Some(bytes) = msg.bytes() {
-            let mut value: gelf::Message<Str> = serde_json::from_slice(bytes)?;
+            let value = if self.include_raw_payload {
+                let mut value: gelf::Message<Str> = serde_json::from_slice(bytes)
+                    .map_err(Error::from)
+                    .map_err(|e| e.context(format!("could not parse GELF from: {:?}", String::from_utf8_lossy(bytes))))?;
 
-            if self.include_raw_payload {
                 value.add(
                     "raw_payload",
                     Value::String(String::from_utf8_lossy(bytes).into_owned()),
                 );
-            }
+
+                value
+            } else {
+                serde_json::from_slice(bytes)?
+            };
 
             with(value.to_clef())
         } else {
@@ -90,7 +96,10 @@ impl Process {
                 msg.into_reader()?.read_to_string(&mut payload)?;
 
                 let mut value: gelf::Message<Inlinable<CachedString>, String> =
-                    serde_json::from_str(&payload)?;
+                    serde_json::from_str(&payload)
+                    .map_err(Error::from)
+                    .map_err(|e| e.context(format!("could not parse GELF from: {:?}", payload)))?;
+
                 value.add("raw_payload", Value::String(payload));
 
                 value
@@ -412,5 +421,16 @@ mod tests {
                 Ok(())
             })
             .expect("failed to read gelf event");
+    }
+
+    #[test]
+    fn invalid_json_includes_some_raw_content() {
+        let gelf = "this is definitely not json";
+
+        let process = Process::new(Config { include_raw_payload: true, ..Default::default() });
+
+        let err = process.with_clef(gelf.as_bytes(), |_| unreachable!()).expect_err("expected parsing to fail");
+
+        assert!(err.to_string().contains(gelf));
     }
 }
