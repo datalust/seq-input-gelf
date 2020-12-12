@@ -2,13 +2,14 @@ use std::net::SocketAddr;
 
 use crate::{
     diagnostics::*,
-    error::Error,
     receive::Message,
     server::{
         OptionMessageExt,
         Received,
     },
 };
+
+use anyhow::Error;
 
 use bytes::{
     Bytes,

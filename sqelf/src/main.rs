@@ -12,7 +12,7 @@ use sqelf::{
         emit,
         emit_err,
     },
-    error::Error,
+    Error,
     process,
     receive,
     server,
@@ -25,7 +25,7 @@ use std::{
     thread,
 };
 
-fn run() -> Result<(), Box<dyn std::error::Error>> {
+fn run() -> Result<(), Error> {
     let config = Config::from_env()?;
 
     // Initialize diagnostics
@@ -84,7 +84,7 @@ fn listen_for_stdin_closed(handle: server::Handle) {
 }
 
 fn main() {
-    let run_server: Result<(), Box<dyn std::error::Error>> = catch_unwind(|| run())
+    let run_server: Result<(), Error> = catch_unwind(|| run())
         .map_err(|panic| unwrap_panic(panic).into())
         .and_then(|inner| inner);
 
@@ -98,11 +98,11 @@ fn main() {
 
 fn unwrap_panic(panic: Box<dyn Any + Send + 'static>) -> Error {
     if let Some(err) = panic.downcast_ref::<&str>() {
-        return Error::msg(err);
+        return Error::msg(err.to_owned());
     }
 
     if let Some(err) = panic.downcast_ref::<String>() {
-        return Error::msg(err);
+        return Error::msg(err.clone());
     }
 
     Error::msg("unexpected panic (this is a bug)")

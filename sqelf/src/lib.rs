@@ -11,7 +11,7 @@ extern crate serde_derive;
 pub mod diagnostics;
 
 #[macro_use]
-pub mod error;
+extern crate anyhow;
 
 pub mod config;
 pub mod io;
@@ -21,5 +21,5 @@ pub mod server;
 
 pub use self::{
     config::Config,
-    error::Error,
+    anyhow::Error,
 };
