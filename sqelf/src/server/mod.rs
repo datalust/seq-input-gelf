@@ -128,7 +128,7 @@ impl Server {
         // Run the server on a fresh runtime
         // We attempt to shut this runtime down cleanly to release
         // any used resources
-        let mut runtime = Runtime::new().expect("failed to start new Runtime");
+        let runtime = Runtime::new().expect("failed to start new Runtime");
 
         runtime.block_on(self.fut);
 

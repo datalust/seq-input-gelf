@@ -111,7 +111,7 @@ struct TcpIncoming(TcpListener);
 impl Stream for TcpIncoming {
     type Item = io::Result<TcpStream>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         match self.0.poll_accept(cx) {
             Poll::Ready(Ok((conn, _))) => Poll::Ready(Some(Ok(conn))),
             Poll::Ready(Err(err)) => Poll::Ready(Some(Err(err))),
@@ -337,7 +337,7 @@ where
 
 struct TimeoutStream<S> {
     keep_alive: Duration,
-    stream: Timeout<StreamFuture<S>>,
+    stream: Pin<Box<Timeout<StreamFuture<S>>>>,
 }
 
 impl<S> TimeoutStream<S>
@@ -349,7 +349,7 @@ where
 
         TimeoutStream {
             keep_alive,
-            stream: timeout(keep_alive, stream.into_future()),
+            stream: Box::pin(timeout(keep_alive, stream.into_future())),
         }
     }
 }
@@ -379,7 +379,7 @@ where
             // The stream has produced an item
             // The timeout is reset
             Poll::Ready(Ok((item, stream))) => {
-                unpinned.stream = timeout(unpinned.keep_alive, stream.into_future());
+                unpinned.stream = Box::pin(timeout(unpinned.keep_alive, stream.into_future()));
 
                 Poll::Ready(item)
             }
