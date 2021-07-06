@@ -128,7 +128,7 @@ impl Server {
         // Run the server on a fresh runtime
         // We attempt to shut this runtime down cleanly to release
         // any used resources
-        let mut runtime = Runtime::new().expect("failed to start new Runtime");
+        let runtime = Runtime::new().expect("failed to start new Runtime");
 
         runtime.block_on(self.fut);
 
@@ -217,9 +217,16 @@ pub fn build(
                         continue;
                     },
                     // An error occurred receiving a chunk
-                    Some(Err(err)) => {
+                    Some(Ok(Received::Error(err))) => {
                         increment!(server.receive_err);
                         emit_err(&err, "GELF processing failed");
+                        continue;
+                    }
+                    // An unrecoverable error occurred receiving a chunk
+                    Some(Err(err)) => {
+                        increment!(server.receive_err);
+                        emit_err(&err, "GELF processing failed irrecoverably");
+                        break;
                     },
                     None => {
                         unreachable!("receiver stream should never terminate")
@@ -253,20 +260,23 @@ pub fn build(
     })
 }
 
+#[derive(Debug)]
 enum Received {
     Incomplete,
     Complete(Message),
+    Error(Error),
 }
 
 trait OptionMessageExt {
     fn into_received(self) -> Option<Received>;
 }
 
-impl OptionMessageExt for Option<Message> {
+impl OptionMessageExt for Result<Option<Message>, Error> {
     fn into_received(self) -> Option<Received> {
         match self {
-            Some(msg) => Some(Received::Complete(msg)),
-            None => Some(Received::Incomplete),
+            Ok(Some(msg)) => Some(Received::Complete(msg)),
+            Ok(None) => Some(Received::Incomplete),
+            Err(err) => Some(Received::Error(err)),
         }
     }
 }

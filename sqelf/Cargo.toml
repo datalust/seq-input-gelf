@@ -12,15 +12,15 @@ version = "0.3.0"
 version = "0.1.0-alpha.4"
 
 [dependencies.tokio]
-version = "0.2.0"
-features = ["signal", "sync", "net", "time", "stream"]
+version = "1.0"
+features = ["signal", "sync", "net", "time", "rt", "rt-multi-thread"]
 
 [dependencies.tokio-util]
-version = "0.2.0"
-features = ["codec", "udp"]
+version = "0.6.0"
+features = ["net", "codec"]
 
 [dependencies.bytes]
-version = "0.5"
+version = "1.0"
 
 [dependencies.libflate]
 version = "0.1"

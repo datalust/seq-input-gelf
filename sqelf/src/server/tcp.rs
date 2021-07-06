@@ -111,7 +111,7 @@ struct TcpIncoming(TcpListener);
 impl Stream for TcpIncoming {
     type Item = io::Result<TcpStream>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         match self.0.poll_accept(cx) {
             Poll::Ready(Ok((conn, _))) => Poll::Ready(Some(Ok(conn))),
             Poll::Ready(Err(err)) => Poll::Ready(Some(Err(err))),
@@ -243,6 +243,8 @@ where
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        // NOTE: We don't use `?` here because we never want to carry results
+        // We always want to match them and deal with error cases directly
         'read_frame: loop {
             let read_to = cmp::min(self.max_size_bytes.saturating_add(1), src.len());
 
@@ -269,7 +271,7 @@ where
                     self.read_head = 0;
                     let src = src.split_to(frame_end + 1).freeze();
 
-                    return Ok((self.receive)(src.slice(..src.len() - 1))?.into_received());
+                    return Ok((self.receive)(src.slice(..src.len() - 1)).into_received());
                 }
                 // A delimiter wasn't found, but the incomplete
                 // message is too big. Start discarding the input
@@ -319,6 +321,8 @@ where
     }
 
     fn decode_eof(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        // NOTE: We don't use `?` here because we never want to carry results
+        // We always want to match them and deal with error cases directly
         Ok(match self.decode(src)? {
             Some(frame) => Some(frame),
             None => {
@@ -328,7 +332,7 @@ where
                     let src = src.split_to(src.len()).freeze();
                     self.read_head = 0;
 
-                    (self.receive)(src)?.into_received()
+                    (self.receive)(src).into_received()
                 }
             }
         })
@@ -337,7 +341,7 @@ where
 
 struct TimeoutStream<S> {
     keep_alive: Duration,
-    stream: Timeout<StreamFuture<S>>,
+    stream: Pin<Box<Timeout<StreamFuture<S>>>>,
 }
 
 impl<S> TimeoutStream<S>
@@ -349,7 +353,7 @@ where
 
         TimeoutStream {
             keep_alive,
-            stream: timeout(keep_alive, stream.into_future()),
+            stream: Box::pin(timeout(keep_alive, stream.into_future())),
         }
     }
 }
@@ -379,7 +383,7 @@ where
             // The stream has produced an item
             // The timeout is reset
             Poll::Ready(Ok((item, stream))) => {
-                unpinned.stream = timeout(unpinned.keep_alive, stream.into_future());
+                unpinned.stream = Box::pin(timeout(unpinned.keep_alive, stream.into_future()));
 
                 Poll::Ready(item)
             }
