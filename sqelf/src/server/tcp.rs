@@ -243,6 +243,8 @@ where
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        // NOTE: We don't use `?` here because we never want to carry results
+        // We always want to match them and deal with error cases directly
         'read_frame: loop {
             let read_to = cmp::min(self.max_size_bytes.saturating_add(1), src.len());
 
@@ -269,7 +271,7 @@ where
                     self.read_head = 0;
                     let src = src.split_to(frame_end + 1).freeze();
 
-                    return Ok((self.receive)(src.slice(..src.len() - 1))?.into_received());
+                    return Ok((self.receive)(src.slice(..src.len() - 1)).into_received());
                 }
                 // A delimiter wasn't found, but the incomplete
                 // message is too big. Start discarding the input
@@ -319,6 +321,8 @@ where
     }
 
     fn decode_eof(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        // NOTE: We don't use `?` here because we never want to carry results
+        // We always want to match them and deal with error cases directly
         Ok(match self.decode(src)? {
             Some(frame) => Some(frame),
             None => {
@@ -328,7 +332,7 @@ where
                     let src = src.split_to(src.len()).freeze();
                     self.read_head = 0;
 
-                    (self.receive)(src)?.into_received()
+                    (self.receive)(src).into_received()
                 }
             }
         })

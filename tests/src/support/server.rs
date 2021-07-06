@@ -25,6 +25,7 @@ use super::SERVER_BIND;
 pub struct Builder {
     tcp_max_size_bytes: u64,
     tcp_keep_alive_secs: u64,
+    udp_max_chunks_per_message: u8,
 }
 
 impl Builder {
@@ -32,6 +33,7 @@ impl Builder {
         Builder {
             tcp_max_size_bytes: 512,
             tcp_keep_alive_secs: 10,
+            udp_max_chunks_per_message: u8::MAX,
         }
     }
 
@@ -45,16 +47,27 @@ impl Builder {
         self
     }
 
+    pub fn udp_max_chunks(mut self, v: u8) -> Self {
+        self.udp_max_chunks_per_message = v;
+        self
+    }
+
     fn build(self, protocol: server::Protocol) -> Server {
-        Server::new(server::Config {
-            bind: server::Bind {
-                addr: SERVER_BIND.into(),
-                protocol,
+        Server::new(
+            server::Config {
+                bind: server::Bind {
+                    addr: SERVER_BIND.into(),
+                    protocol,
+                },
+                tcp_max_size_bytes: self.tcp_max_size_bytes,
+                tcp_keep_alive_secs: self.tcp_keep_alive_secs,
+                ..Default::default()
             },
-            tcp_max_size_bytes: self.tcp_max_size_bytes,
-            tcp_keep_alive_secs: self.tcp_keep_alive_secs,
-            ..Default::default()
-        })
+            receive::Config {
+                max_chunks_per_message: self.udp_max_chunks_per_message,
+                ..Default::default()
+            }
+        )
     }
 
     pub fn udp(self) -> Server {
@@ -86,16 +99,14 @@ pub fn tcp() -> Server {
 }
 
 impl Server {
-    fn new(config: server::Config) -> Self {
+    fn new(server_config: server::Config, receive_config: receive::Config) -> Self {
         let (tx, rx) = crossbeam_channel::unbounded();
         let received = Arc::new(Mutex::new(0));
 
         let mut server = server::build(
-            config,
+            server_config,
             {
-                let mut receive = receive::build(receive::Config {
-                    ..Default::default()
-                });
+                let mut receive = receive::build(receive_config);
 
                 move |src| receive.decode(src)
             },
