@@ -23,6 +23,8 @@ use serde::{
 use serde_json::Value;
 
 use super::str::Str;
+use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Message<'a> {
@@ -64,17 +66,19 @@ impl Timestamp {
         Timestamp(SystemTime::now())
     }
 
-    pub(super) fn from_float(ts: f64) -> Self {
+    pub(super) fn from_decimal(ts: Decimal) -> Self {
         // If the timestamp is before the epoch
         // then just return the epoch
         if ts.is_sign_negative() {
             return Timestamp(SystemTime::UNIX_EPOCH);
         }
 
-        let secs = ts.trunc() as u64;
+        let secs = ts.trunc().to_i64().unwrap() as u64;
         let nanos = {
-            let nanos = (ts.fract() * 10f64.powi(9)) as u32;
-            (nanos / 1_000_000) * 1_000_000
+            let mut fract = ts.fract();
+            fract.set_scale(0).unwrap();
+            let scaled_fract = fract.to_i32().unwrap() as u32;
+            scaled_fract * 10_u32.pow(9 - ts.scale())
         };
 
         Timestamp(SystemTime::UNIX_EPOCH + Duration::new(secs, nanos))
