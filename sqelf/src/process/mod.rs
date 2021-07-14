@@ -181,7 +181,7 @@ where
         // Set the timestamp
         if clef.timestamp.is_none() {
             clef.timestamp = timestamp
-                .map(clef::Timestamp::from_decimal)
+                .and_then(clef::Timestamp::from_decimal)
                 .or_else(|| Some(clef::Timestamp::now()));
         }
 
