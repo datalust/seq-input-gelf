@@ -23,8 +23,7 @@ use serde::{
 use serde_json::Value;
 
 use super::str::Str;
-use rust_decimal::Decimal;
-use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::prelude::*;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Message<'a> {
@@ -73,19 +72,14 @@ impl Timestamp {
             return Option::Some(Timestamp(SystemTime::UNIX_EPOCH));
         }
 
-        if let Option::Some(secs) = ts.trunc().to_i64() {
-            let mut fract = ts.fract();
-            if fract.set_scale(0).is_err() {
-                return Option::None;
-            }
-            if let Option::Some(scaled_fract) = fract.to_i32() {
-                let nanos = (scaled_fract as u32) * 10_u32.pow(9 - ts.scale());
-                return Option::Some(Timestamp(SystemTime::UNIX_EPOCH +
-                    Duration::new(secs as u64, nanos)));
-            }
-        }
+        let secs = ts.trunc().to_u64()?;
+        let mut fract = ts.fract();
+        fract.set_scale(0).ok()?;
 
-        Option::None
+        let scaled_fract = fract.to_u32()?;
+        let nanos = scaled_fract * 10u32.pow(9 - ts.scale());
+
+        Some(Timestamp(SystemTime::UNIX_EPOCH + Duration::new(secs, nanos)))
     }
 }
 
