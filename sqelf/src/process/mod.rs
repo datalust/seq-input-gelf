@@ -181,7 +181,7 @@ where
         // Set the timestamp
         if clef.timestamp.is_none() {
             clef.timestamp = timestamp
-                .map(clef::Timestamp::from_float)
+                .and_then(clef::Timestamp::from_decimal)
                 .or_else(|| Some(clef::Timestamp::now()));
         }
 
@@ -304,7 +304,7 @@ mod tests {
                 }
 
                 let expected = json!({
-                    "@t": "2013-11-21T17:11:02.307000000Z",
+                    "@t": "2013-11-21T17:11:02.307200000Z",
                     "@l": "alert",
                     "@m": "A short message that helps you identify what is going on",
                     "@x": "Backtrace here",
@@ -387,7 +387,7 @@ mod tests {
             "host": "example.org",
             "short_message": "A short message that helps you identify what is going on",
             "full_message": "Backtrace here",
-            "timestamp": 1385053862.3072,
+            "timestamp": 1385053862.04736,
             "level": 1,
             "_user_id": 9001,
             "_some_info": "foo",
@@ -403,7 +403,7 @@ mod tests {
                 }
 
                 let expected = json!({
-                    "@t": "2013-11-21T17:11:02.307000000Z",
+                    "@t": "2013-11-21T17:11:02.047360000Z",
                     "@l": "alert",
                     "@m": "A short message that helps you identify what is going on",
                     "@x": "Backtrace here",

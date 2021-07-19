@@ -55,3 +55,6 @@ version = "1"
 
 [dependencies.anyhow]
 version = "1"
+
+[dependencies.rust_decimal]
+version = "1.14"
