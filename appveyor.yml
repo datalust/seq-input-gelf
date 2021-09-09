@@ -1,13 +1,11 @@
 version: '2.0.{build}'
 skip_tags: true
 image:
-- Visual Studio 2017
-- Ubuntu1804
+- Visual Studio 2019
+- Ubuntu
 test: off
 
 environment:
-  CLI_VERSION: '5.0.165'
-  RUST_TOOLCHAIN: 'nightly-2019-09-30'
   DOCKER_TOKEN:
    secure: QKr2YEuliXdFKe3jN7w97w==
   DOCKER_USER:
@@ -20,7 +18,7 @@ for:
 -
   matrix:
     only:
-      - image: Visual Studio 2017
+      - image: Visual Studio 2019
 
   install:
   - ps: ./ci/win-x64/setup.ps1
@@ -36,11 +34,11 @@ for:
     skip_symbols: true
     artifact: /Seq.Input.Gelf.*\.nupkg/
     on:
-      branch: /^(dev|release)$/
+      branch: /^(dev|main)$/
 -
   matrix:
     only:
-      - image: Ubuntu1804
+      - image: Ubuntu1
 
   install:
   - ./ci/linux-x64/setup.sh
