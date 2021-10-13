@@ -38,7 +38,7 @@ for:
 -
   matrix:
     only:
-      - image: Ubuntu1
+      - image: Ubuntu
 
   install:
   - ./ci/linux-x64/setup.sh
