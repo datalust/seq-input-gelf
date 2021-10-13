@@ -207,6 +207,15 @@ pub fn emit(message_template: &'static str) {
     }
 }
 
+pub fn emit_debug_err(error: &impl Display, message_template: &'static str) {
+    if MIN_LEVEL.includes(Level::Debug) {
+        let err_str = format!("{}", error);
+        let evt = DiagnosticEvent::new("DEBUG", Some(&err_str), &message_template, None);
+        let json = serde_json::to_string(&evt).expect("infallible JSON");
+        eprintln!("{}", json);
+    }
+}
+
 pub fn emit_err(error: &impl Display, message_template: &'static str) {
     if MIN_LEVEL.includes(Level::Error) {
         let err_str = format!("{}", error);

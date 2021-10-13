@@ -175,9 +175,12 @@ where
                         }
                         // An error occurred, probably IO-related
                         // In this case the connection isn't returned to the pool.
-                        // It's closed on drop and the error is returned.
+                        // It's closed on drop and the next connection will be polled.
                         Err(err) => {
-                            return Poll::Ready(Some(Err(err.into())));
+                            increment!(server.receive_err);
+                            emit_debug_err(&err, "GELF TCP client failed");
+
+                            continue 'poll_conns;
                         }
                     }
                 }
@@ -191,7 +194,7 @@ where
         }
 
         // If we've gotten this far, then there are no events for us to process
-        // and nothing was ready, so figure out if we're not done yet  or if
+        // and nothing was ready, so figure out if we're not done yet or if
         // we've reached the end.
         if self.accept.is_done() {
             Poll::Ready(None)
