@@ -8,13 +8,14 @@
     <description>Ingest GELF event payloads over TCP or UDP.</description>
     <language>en-US</language>
     <projectUrl>https://github.com/datalust/sqelf</projectUrl>
-    <licenseUrl>http://www.apache.org/licenses/LICENSE-2.0</licenseUrl>
-    <iconUrl>https://raw.githubusercontent.com/datalust/sqelf/release/asset/seq-input-gelf.png</iconUrl>
+    <license type="expression">Apache-2.0</license>
+    <icon>seq-input-gelf.png</icon>
     <tags>seq-app</tags>
   </metadata>
   <files>
     <file src="seq-input-gelf.d.json" target="" />
-    <file src="target\x86_64-pc-windows-msvc\release\sqelf.exe" target="win-x64" />
-    <file src="target\x86_64-unknown-linux-musl\release\sqelf" target="linux-x64\sqelf" />
+    <file src="target/x86_64-pc-windows-msvc/release/sqelf.exe" target="win-x64" />
+    <file src="target/x86_64-unknown-linux-musl/release/sqelf" target="linux-x64/sqelf" />
+    <file src="asset/seq-input-gelf.png" target="" />
   </files>
 </package>

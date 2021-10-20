@@ -362,7 +362,7 @@ impl ChunkHeader {
         let seq_count = buf.get_u8();
 
         if seq_num >= seq_count {
-            bail!("expected {} chunks but got {}", seq_count, seq_num)
+            bail!("expected {} chunks but got {}", seq_count, seq_num + 1)
         }
 
         Ok(ChunkHeader {

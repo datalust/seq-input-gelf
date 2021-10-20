@@ -1,4 +1,5 @@
 use serde_json::Value;
+use rust_decimal::Decimal;
 
 #[derive(Debug, Deserialize)]
 pub(super) struct Message<TString, TMessage = TString> {
@@ -7,7 +8,7 @@ pub(super) struct Message<TString, TMessage = TString> {
     pub(super) host: Option<TString>,
     pub(super) short_message: TMessage,
     pub(super) full_message: Option<TMessage>,
-    pub(super) timestamp: Option<f64>,
+    pub(super) timestamp: Option<Decimal>,
     pub(super) level: Option<u8>,
 
     // Deprecated built-ins, still may be present

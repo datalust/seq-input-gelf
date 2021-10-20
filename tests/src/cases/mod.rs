@@ -3,6 +3,9 @@ cases! {
     udp_simple,
     udp_invalid,
     udp_chunked_simple,
+    udp_chunked_out_of_order,
+    udp_chunked_overflow,
+    udp_chunked_overflow_invalid_header,
 
     tcp_empty,
     tcp_simple,

@@ -57,9 +57,18 @@ where
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        // NOTE: We don't use `?` here because we never want to carry results
+        // We always want to match them and deal with error cases directly
+
         // All datagrams are considered a valid message
         let src = src.split_to(src.len()).freeze();
 
-        Ok((self.0)(src)?.into_received())
+        if src.is_empty() {
+            // As per the contract of `Decoder`, we return `None`
+            // here to indicate more data is needed to complete a frame
+            return Ok(None);
+        }
+
+        Ok((self.0)(src).into_received())
     }
 }

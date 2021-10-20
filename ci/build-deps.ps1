@@ -17,7 +17,7 @@ function Get-SemVer($shortver)
 {
     # This script originally (c) 2016 Serilog Contributors - license Apache 2.0
     $branch = @{ $true = $env:APPVEYOR_REPO_BRANCH; $false = $(git symbolic-ref --short -q HEAD) }[$env:APPVEYOR_REPO_BRANCH -ne $NULL];
-    $suffix = @{ $true = ""; $false = ($branch.Substring(0, [math]::Min(10,$branch.Length)) -replace '[\/\+]','-').Trim("-")}[$branch -eq "release"]
+    $suffix = @{ $true = ""; $false = ($branch.Substring(0, [math]::Min(10,$branch.Length)) -replace '[\/\+]','-').Trim("-")}[$branch -eq "main"]
 
     if ($suffix) {
         $shortver + "-" + $suffix
@@ -33,7 +33,7 @@ function Run-Command
     # For commands that treat stderr like stdetc
     $out = New-TemporaryFile
     $err = New-TemporaryFile
-    $r = Start-Process $Exe -ArgumentList $ArgumentList -Wait -PassThru -RedirectStandardOut $out.FullName -RedirectStandardError $err.FullName
+    $r = Start-Process $Exe -ArgumentList $ArgumentList -Wait -PassThru -RedirectStandardOut $out.FullName -RedirectStandardError $err.FullName -NoNewWindow
 
     Write-Output "STDOUT"
     Get-Content -Path $out.FullName
