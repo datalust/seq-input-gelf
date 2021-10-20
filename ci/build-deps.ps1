@@ -33,7 +33,7 @@ function Run-Command
     # For commands that treat stderr like stdetc
     $out = New-TemporaryFile
     $err = New-TemporaryFile
-    $r = Start-Process $Exe -ArgumentList $ArgumentList -Wait -PassThru -RedirectStandardOut $out.FullName -RedirectStandardError $err.FullName
+    $r = Start-Process $Exe -ArgumentList $ArgumentList -Wait -PassThru -RedirectStandardOut $out.FullName -RedirectStandardError $err.FullName -NoNewWindow
 
     Write-Output "STDOUT"
     Get-Content -Path $out.FullName
