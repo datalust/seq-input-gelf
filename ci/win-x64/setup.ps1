@@ -12,4 +12,7 @@ $env:Path = "C:\Users\appveyor\.cargo\bin;$env:Path"
 & rustup target add x86_64-unknown-linux-musl
 if ($LASTEXITCODE) { exit 1 }
 
+& rustup target add aarch64-unknown-linux-musl
+if ($LASTEXITCODE) { exit 1 }
+
 $ErrorActionPreference = "Stop"

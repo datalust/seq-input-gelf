@@ -68,6 +68,7 @@ function Invoke-LinuxBuild
     Write-BeginStep $MYINVOCATION
 
     Run-Command -Exe cargo -ArgumentList 'build', '--bin sqelf', '--release', '--target x86_64-unknown-linux-musl'
+    Run-Command -Exe cargo -ArgumentList 'build', '--bin sqelf', '--release', '--target aarch64-unknown-linux-musl'
 }
 function Invoke-LinuxTests
 {
