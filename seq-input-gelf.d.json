@@ -11,7 +11,7 @@
         "executable": "linux-x64/sqelf"
       },
       "linux-arm64": {
-        "executable": "linux-arm64/jsonarchive"
+        "executable": "linux-arm64/sqelf"
       }
     },
     "settings": {
