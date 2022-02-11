@@ -178,7 +178,7 @@ where
             })
         }
 
-        // Set the timestamp
+        // Set the timestamp, giving priority to the embedded CLEF timestamp
         if clef.timestamp.is_none() {
             clef.timestamp = timestamp
                 .and_then(clef::Timestamp::from_decimal)
@@ -234,7 +234,27 @@ where
             Self::override_value(&mut clef.additional, "line", (*line).into());
         }
 
+        // If we reach the end without a message or message template then try find a
+        // suitable substitute in the events properties
+        if clef.message.is_none() && clef.message_template.is_none() {
+            clef.message = Self::find_first(&clef.additional, &["message", "msg"])
+                .and_then(|msg| match msg.as_str() {
+                    Some(str) => Some(Str::Owned(str.to_owned())),
+                    None => None
+                });
+        }
+
         clef
+    }
+
+    fn find_first<'a, 'b>(fields: &'b HashMap<Str<'a>, Value>, names: &'b [&str]) -> Option<&'b Value> {
+        for name in names {
+            if let Some(value) = fields.get(&Str::Borrowed(name)) {
+                return Some(value)
+            }
+        }
+
+        None
     }
 
     fn override_value<'a>(
@@ -369,6 +389,41 @@ mod tests {
                     "image_id": "abcdefghijklmnopqrstuv",
                     "tag": "latest",
                     "host": "example.org"
+                });
+
+                let clef = serde_json::to_value(&clef).expect("failed to read clef");
+
+                assert_eq!(expected, clef);
+
+                Ok(())
+            })
+            .expect("failed to read gelf event");
+    }
+
+    #[test]
+    fn from_gelf_inner_json_fallback() {
+        let clef = json!({
+            "message": "A short message that helps {user_id} identify what is going on"
+        });
+
+        let gelf = json!({
+            "version": "1.1",
+            "timestamp": 1385053862.3072,
+            "host": "example.org",
+            "short_message": clef.to_string(),
+            "level": 6,
+        });
+
+        let process = Process::new(Default::default());
+
+        process
+            .with_clef(gelf.to_string().as_bytes(), |clef| {
+                let expected = json!({
+                    "@l": "info",
+                    "@m": "A short message that helps {user_id} identify what is going on",
+                    "@t": "2013-11-21T17:11:02.307200000Z",
+                    "host": "example.org",
+                    "message": "A short message that helps {user_id} identify what is going on"
                 });
 
                 let clef = serde_json::to_value(&clef).expect("failed to read clef");
