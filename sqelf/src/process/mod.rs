@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn from_gelf_inner_json_fallback() {
-        let clef = json!({
+        let inner_json = json!({
             "message": "A short message that helps {user_id} identify what is going on"
         });
 
@@ -410,7 +410,7 @@ mod tests {
             "version": "1.1",
             "timestamp": 1385053862.3072,
             "host": "example.org",
-            "short_message": clef.to_string(),
+            "short_message": inner_json.to_string(),
             "level": 6,
         });
 
