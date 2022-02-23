@@ -7,6 +7,7 @@ curl https://sh.rustup.rs -sSf | sh -s -- --default-host x86_64-unknown-linux-gn
 export PATH="$HOME/.cargo/bin:$PATH"
 
 rustup target add x86_64-unknown-linux-musl
+rustup target add aarch64-unknown-linux-musl
 
 ls /home/appveyor
 ls /home/appveyor/.cargo
