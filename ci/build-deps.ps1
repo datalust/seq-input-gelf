@@ -82,7 +82,8 @@ function Invoke-DockerBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    docker build --no-cache --file dockerfiles/Dockerfile -t sqelf-ci:latest .
+    docker buildx build --platform linux/amd64 --file dockerfiles/x86_64-unknown-linux-musl.Dockerfile -t sqelf-ci:latest-x64 .
+    docker buildx build --platform linux/arm64 --file dockerfiles/aarch64-unknown-linux-musl.Dockerfile -t sqelf-ci:latest-arm64 .
     if ($LASTEXITCODE) { exit 1 }
 }
 
@@ -112,7 +113,10 @@ function Publish-Container($version)
 {
     Write-BeginStep $MYINVOCATION
 
-    docker tag sqelf-ci:latest datalust/sqelf-ci:$version
+    docker tag sqelf-ci:latest-x64 datalust/sqelf-ci:$version-x64
+    if ($LASTEXITCODE) { exit 1 }
+
+    docker tag sqelf-ci:latest-arm64 datalust/sqelf-ci:$version-arm64
     if ($LASTEXITCODE) { exit 1 }
 
     if ($IsCIBuild)
@@ -121,7 +125,16 @@ function Publish-Container($version)
         if ($LASTEXITCODE) { exit 1 }
     }
 
-    docker push datalust/sqelf-ci:$version
+    docker push datalust/sqelf-ci:$version-x64
+    if ($LASTEXITCODE) { exit 1 }
+
+    docker push datalust/sqelf-ci:$version-arm64
+    if ($LASTEXITCODE) { exit 1 }
+
+    docker manifest create datalust/sqelf-ci:$version datalust/sqelf-ci:$version-x64 datalust/sqelf-ci:$version-arm64
+    if ($LASTEXITCODE) { exit 1 }
+
+    docker manifest push datalust/sqelf-ci:$version
     if ($LASTEXITCODE) { exit 1 }
 }
 
@@ -167,7 +180,7 @@ function Start-SeqEnvironment($protocol) {
         -e GELF_ENABLE_DIAGNOSTICS="True" `
         -itd `
         -p "12202:${portArg}" `
-        sqelf-ci:latest
+        sqelf-ci:latest-x64
     if ($LASTEXITCODE) {
         Pop-Location
         exit 1
