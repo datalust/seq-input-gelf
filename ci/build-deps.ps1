@@ -83,6 +83,8 @@ function Invoke-DockerBuild
     Write-BeginStep $MYINVOCATION
 
     docker buildx build --platform linux/amd64 --file dockerfiles/x86_64-unknown-linux-musl.Dockerfile -t sqelf-ci:latest-x64 .
+    if ($LASTEXITCODE) { exit 1 }
+
     docker buildx build --platform linux/arm64 --file dockerfiles/aarch64-unknown-linux-musl.Dockerfile -t sqelf-ci:latest-arm64 .
     if ($LASTEXITCODE) { exit 1 }
 }
