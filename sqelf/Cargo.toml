@@ -12,7 +12,7 @@ version = "0.3.0"
 version = "0.1.0-alpha.4"
 
 [dependencies.tokio]
-version = "1.0"
+version = "1.8"
 features = ["signal", "sync", "net", "time", "rt", "rt-multi-thread"]
 
 [dependencies.tokio-util]
