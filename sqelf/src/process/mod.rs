@@ -4,21 +4,11 @@ pub mod str;
 
 use serde_json::Value;
 
-use self::str::{
-    CachedString,
-    Inlinable,
-    Str,
-};
+use self::str::{CachedString, Inlinable, Str};
 
-use crate::{
-    Error,
-    io::MemRead,
-};
+use crate::{io::MemRead, Error};
 
-use std::{
-    collections::HashMap,
-    io::Read,
-};
+use std::{collections::HashMap, io::Read};
 
 metrics! {
     msg
@@ -77,7 +67,12 @@ impl Process {
             let value = if self.include_raw_payload {
                 let mut value: gelf::Message<Str> = serde_json::from_slice(bytes)
                     .map_err(Error::from)
-                    .map_err(|e| e.context(format!("could not parse GELF from: {:?}", String::from_utf8_lossy(bytes))))?;
+                    .map_err(|e| {
+                        e.context(format!(
+                            "could not parse GELF from: {:?}",
+                            String::from_utf8_lossy(bytes)
+                        ))
+                    })?;
 
                 value.add(
                     "raw_payload",
@@ -97,8 +92,10 @@ impl Process {
 
                 let mut value: gelf::Message<Inlinable<CachedString>, String> =
                     serde_json::from_str(&payload)
-                    .map_err(Error::from)
-                    .map_err(|e| e.context(format!("could not parse GELF from: {:?}", payload)))?;
+                        .map_err(Error::from)
+                        .map_err(|e| {
+                            e.context(format!("could not parse GELF from: {:?}", payload))
+                        })?;
 
                 value.add("raw_payload", Value::String(payload));
 
@@ -163,19 +160,25 @@ where
         let mut clef = clef::Message::maybe_from_json(short_message.as_ref())
             .unwrap_or_else(|| clef::Message::from_message(short_message.as_ref()));
 
-        // Set the log level; these are the standard Syslog levels
+        // Set the log level; these are the standard Syslog levels, giving priority to the embedded CLEF level
+        // Before using the level on the GELF payload, we'll try find a suitable property in the JSON itself
         if clef.level.is_none() {
-            clef.level = Some(match level.unwrap_or(6) {
-                0 => Str::Borrowed("emerg"),
-                1 => Str::Borrowed("alert"),
-                2 => Str::Borrowed("crit"),
-                3 => Str::Borrowed("err"),
-                4 => Str::Borrowed("warning"),
-                5 => Str::Borrowed("notice"),
-                6 => Str::Borrowed("info"),
-                7 => Str::Borrowed("debug"),
-                _ => Str::Borrowed("debug"),
-            })
+            clef.level = Some(
+                Self::find_first(&clef.additional, &["level", "lvl"])
+                    .and_then(Str::try_from_value)
+                    .map(|s| s.into_owned())
+                    .unwrap_or_else(|| match level.unwrap_or(6) {
+                        0 => Str::Borrowed("emerg"),
+                        1 => Str::Borrowed("alert"),
+                        2 => Str::Borrowed("crit"),
+                        3 => Str::Borrowed("err"),
+                        4 => Str::Borrowed("warning"),
+                        5 => Str::Borrowed("notice"),
+                        6 => Str::Borrowed("info"),
+                        7 => Str::Borrowed("debug"),
+                        _ => Str::Borrowed("debug"),
+                    }),
+            );
         }
 
         // Set the timestamp, giving priority to the embedded CLEF timestamp
@@ -195,6 +198,13 @@ where
                 // value in both fields.
                 .filter(|full_message| *full_message != short_message.as_ref())
                 .map(Str::Borrowed);
+        }
+
+        // Set the message, try find a suitable property in the JSON event itself
+        if clef.message.is_none() && clef.message_template.is_none() {
+            clef.message = Self::find_first(&clef.additional, &["message", "msg"])
+                .and_then(Str::try_from_value)
+                .map(|s| s.into_owned());
         }
 
         // Set additional properties first; these override any in an embedded CLEF payload,
@@ -234,23 +244,16 @@ where
             Self::override_value(&mut clef.additional, "line", (*line).into());
         }
 
-        // If we reach the end without a message or message template then try find a
-        // suitable substitute in the events properties
-        if clef.message.is_none() && clef.message_template.is_none() {
-            clef.message = Self::find_first(&clef.additional, &["message", "msg"])
-                .and_then(|msg| match msg.as_str() {
-                    Some(str) => Some(Str::Owned(str.to_owned())),
-                    None => None
-                });
-        }
-
         clef
     }
 
-    fn find_first<'a, 'b>(fields: &'b HashMap<Str<'a>, Value>, names: &'b [&str]) -> Option<&'b Value> {
+    fn find_first<'a, 'b>(
+        fields: &'b HashMap<Str<'a>, Value>,
+        names: &'b [&str],
+    ) -> Option<&'b Value> {
         for name in names {
             if let Some(value) = fields.get(&Str::Borrowed(name)) {
-                return Some(value)
+                return Some(value);
             }
         }
 
@@ -403,6 +406,9 @@ mod tests {
     #[test]
     fn from_gelf_inner_json_fallback() {
         let inner_json = json!({
+            // Fallback for @l
+            "level": "error",
+            // Fallback for @m
             "message": "A short message that helps {user_id} identify what is going on"
         });
 
@@ -419,10 +425,11 @@ mod tests {
         process
             .with_clef(gelf.to_string().as_bytes(), |clef| {
                 let expected = json!({
-                    "@l": "info",
+                    "@l": "error",
                     "@m": "A short message that helps {user_id} identify what is going on",
                     "@t": "2013-11-21T17:11:02.307200000Z",
                     "host": "example.org",
+                    "level": "error",
                     "message": "A short message that helps {user_id} identify what is going on"
                 });
 
@@ -449,7 +456,10 @@ mod tests {
             "_some_env_var": "bar"
         });
 
-        let process = Process::new(Config { include_raw_payload: true, ..Default::default() });
+        let process = Process::new(Config {
+            include_raw_payload: true,
+            ..Default::default()
+        });
 
         process
             .with_clef(gelf.to_string().as_bytes(), |clef| {
@@ -482,9 +492,14 @@ mod tests {
     fn invalid_json_includes_some_raw_content() {
         let gelf = "this is definitely not json";
 
-        let process = Process::new(Config { include_raw_payload: true, ..Default::default() });
+        let process = Process::new(Config {
+            include_raw_payload: true,
+            ..Default::default()
+        });
 
-        let err = process.with_clef(gelf.as_bytes(), |_| unreachable!()).expect_err("expected parsing to fail");
+        let err = process
+            .with_clef(gelf.as_bytes(), |_| unreachable!())
+            .expect_err("expected parsing to fail");
 
         assert!(err.to_string().contains(gelf));
     }

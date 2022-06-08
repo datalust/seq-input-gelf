@@ -1,34 +1,17 @@
 use std::{
-    cmp::{
-        Ord,
-        Ordering,
-        PartialOrd,
-    },
+    cmp::{Ord, Ordering, PartialOrd},
     fmt,
-    hash::{
-        Hash,
-        Hasher,
-    },
+    hash::{Hash, Hasher},
     ops::Deref,
 };
 
 use serde::{
-    de::{
-        self,
-        Deserialize,
-        Deserializer,
-        Visitor,
-    },
-    ser::{
-        Serialize,
-        Serializer,
-    },
+    de::{self, Deserialize, Deserializer, Visitor},
+    ser::{Serialize, Serializer},
 };
 
-use inlinable_string::{
-    InlineString,
-    INLINE_STRING_CAPACITY,
-};
+use inlinable_string::{InlineString, INLINE_STRING_CAPACITY};
+use serde_json::Value;
 
 pub use string_cache::DefaultAtom as CachedString;
 
@@ -40,6 +23,21 @@ borrowed data.
 pub enum Str<'a, S = String> {
     Borrowed(&'a str),
     Owned(S),
+}
+
+impl<'a, S> Str<'a, S> {
+    pub(crate) fn try_from_value(value: &'a Value) -> Option<Self> {
+        value.as_str().map(|s| Str::Borrowed(s))
+    }
+}
+
+impl<'a> Str<'a> {
+    pub(crate) fn into_owned(self) -> Str<'static> {
+        match self {
+            Str::Borrowed(s) => Str::Owned(s.to_owned()),
+            Str::Owned(s) => Str::Owned(s),
+        }
+    }
 }
 
 impl<'a, S> AsRef<str> for Str<'a, S>
