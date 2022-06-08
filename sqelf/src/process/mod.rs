@@ -164,7 +164,7 @@ where
         // Before using the level on the GELF payload, we'll try find a suitable property in the JSON itself
         if clef.level.is_none() {
             clef.level = Some(
-                Self::find_first(&clef.additional, &["level", "lvl"])
+                Self::find_first(&clef.additional, &["level", "lvl", "LVL"])
                     .and_then(Str::try_from_value)
                     .map(|s| s.into_owned())
                     .unwrap_or_else(|| match level.unwrap_or(6) {
@@ -202,7 +202,7 @@ where
 
         // Set the message, try find a suitable property in the JSON event itself
         if clef.message.is_none() && clef.message_template.is_none() {
-            clef.message = Self::find_first(&clef.additional, &["message", "msg"])
+            clef.message = Self::find_first(&clef.additional, &["message", "msg", "MSG"])
                 .and_then(Str::try_from_value)
                 .map(|s| s.into_owned());
         }
