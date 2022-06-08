@@ -182,10 +182,17 @@ where
         }
 
         // Set the timestamp, giving priority to the embedded CLEF timestamp
+        // Before using the timestamp on the GELF payload, we'll try find a suitable property in the JSON itself
         if clef.timestamp.is_none() {
-            clef.timestamp = timestamp
-                .and_then(clef::Timestamp::from_decimal)
-                .or_else(|| Some(clef::Timestamp::now()));
+            clef.timestamp =
+                Self::find_first(&clef.additional, &["timestamp", "ts", "TIMESTAMP", "TS"])
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| clef::Timestamp::try_parse_rfc3339(s))
+                    .or_else(|| {
+                        timestamp
+                            .and_then(clef::Timestamp::from_decimal)
+                            .or_else(|| Some(clef::Timestamp::now()))
+                    });
         }
 
         // Set the exception, giving priority to the embedded CLEF exception.
@@ -409,7 +416,9 @@ mod tests {
             // Fallback for @l
             "level": "error",
             // Fallback for @m
-            "message": "A short message that helps {user_id} identify what is going on"
+            "message": "A short message that helps {user_id} identify what is going on",
+            // Fallback for @t
+            "timestamp": "2022-06-21T17:11:02.307200000Z"
         });
 
         let gelf = json!({
@@ -427,10 +436,11 @@ mod tests {
                 let expected = json!({
                     "@l": "error",
                     "@m": "A short message that helps {user_id} identify what is going on",
-                    "@t": "2013-11-21T17:11:02.307200000Z",
+                    "@t": "2022-06-21T17:11:02.307200000Z",
                     "host": "example.org",
                     "level": "error",
-                    "message": "A short message that helps {user_id} identify what is going on"
+                    "message": "A short message that helps {user_id} identify what is going on",
+                    "timestamp": "2022-06-21T17:11:02.307200000Z"
                 });
 
                 let clef = serde_json::to_value(&clef).expect("failed to read clef");
