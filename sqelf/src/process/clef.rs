@@ -1,23 +1,12 @@
 use std::{
     collections::HashMap,
     fmt,
-    time::{
-        Duration,
-        SystemTime,
-    },
+    time::{Duration, SystemTime},
 };
 
 use serde::{
-    de::{
-        self,
-        Deserialize,
-        Deserializer,
-        Visitor,
-    },
-    ser::{
-        Serialize,
-        Serializer,
-    },
+    de::{self, Deserialize, Deserializer, Visitor},
+    ser::{Serialize, Serializer},
 };
 
 use serde_json::Value;
@@ -65,6 +54,10 @@ impl Timestamp {
         Timestamp(SystemTime::now())
     }
 
+    pub(super) fn try_parse_rfc3339(ts: &str) -> Option<Self> {
+        Some(Timestamp(humantime::parse_rfc3339(ts).ok()?))
+    }
+
     pub(super) fn from_decimal(ts: Decimal) -> Option<Self> {
         // If the timestamp is before the epoch
         // then just return the epoch
@@ -79,7 +72,9 @@ impl Timestamp {
         let scaled_fract = fract.to_u32()?;
         let nanos = scaled_fract * 10u32.pow(9 - ts.scale());
 
-        Some(Timestamp(SystemTime::UNIX_EPOCH + Duration::new(secs, nanos)))
+        Some(Timestamp(
+            SystemTime::UNIX_EPOCH + Duration::new(secs, nanos),
+        ))
     }
 }
 

@@ -1,3 +1,15 @@
+/*!
+A lightweight GELF server that writes CLEF to stdout.
+
+The server is split into a few main components, in order of where they appear in the processing of a log event:
+
+- **Server**: An asynchronous UDP/TCP server built on `tokio` that handles the network.
+- **Receive**: Assembles complete GELF messages from their chunked, compressed, out-of-order
+blocks arriving from the network.
+- **Process**: Deserializes GELF messages and maps them into CLEF. This is where any transformations
+over properties are made.
+*/
+
 #![recursion_limit = "256"]
 #![deny(unsafe_code)]
 
@@ -19,7 +31,4 @@ pub mod process;
 pub mod receive;
 pub mod server;
 
-pub use self::{
-    config::Config,
-    anyhow::Error,
-};
+pub use self::{anyhow::Error, config::Config};
