@@ -66,7 +66,7 @@ impl Builder {
             receive::Config {
                 max_chunks_per_message: self.udp_max_chunks_per_message,
                 ..Default::default()
-            }
+            },
         )
     }
 

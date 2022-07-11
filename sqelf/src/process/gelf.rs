@@ -1,5 +1,5 @@
-use serde_json::Value;
 use rust_decimal::Decimal;
+use serde_json::Value;
 
 #[derive(Debug, Deserialize)]
 pub(super) struct Message<TString, TMessage = TString> {

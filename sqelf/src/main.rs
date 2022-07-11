@@ -12,10 +12,10 @@ use sqelf::{
         emit,
         emit_err,
     },
-    Error,
     process,
     receive,
     server,
+    Error,
 };
 
 use std::{

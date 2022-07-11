@@ -19,6 +19,12 @@ features = ["signal", "sync", "net", "time", "rt", "rt-multi-thread"]
 version = "0.6.0"
 features = ["net", "codec"]
 
+[dependencies.tokio-rustls]
+version = "0.23"
+
+[dependencies.rustls-pemfile]
+version = "1"
+
 [dependencies.bytes]
 version = "1.0"
 

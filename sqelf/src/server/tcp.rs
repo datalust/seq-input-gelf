@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::{
     cmp,
     io,
@@ -24,10 +25,7 @@ use bytes::{
 };
 
 use futures::{
-    future::{
-        self,
-        Future,
-    },
+    future::Future,
     stream::{
         futures_unordered::FuturesUnordered,
         Fuse,
@@ -43,6 +41,7 @@ use futures::{
 
 use pin_utils::unsafe_pinned;
 
+use tokio::io::AsyncRead;
 use tokio::{
     net::{
         TcpListener,
@@ -53,11 +52,14 @@ use tokio::{
         Timeout,
     },
 };
+use tokio_rustls::rustls::ServerConfig;
 
 use tokio_util::codec::{
     Decoder,
     FramedRead,
 };
+
+use tokio_rustls::TlsAcceptor;
 
 pub(super) struct Server(TcpIncoming);
 
@@ -72,6 +74,7 @@ impl Server {
         self,
         keep_alive: Duration,
         max_size_bytes: usize,
+        tls: Option<ServerConfig>,
         receive: impl FnMut(Bytes) -> Result<Option<Message>, Error>
             + Send
             + Sync
@@ -81,29 +84,93 @@ impl Server {
     ) -> impl Stream<Item = Result<Received, Error>> {
         emit("Setting up for TCP");
 
-        self.0
-            .filter_map(move |conn| {
-                match conn {
-                    // The connection was successfully established
-                    // Create a new protocol reader over it
-                    // It'll get added to the connection pool
-                    Ok(conn) => {
-                        let decode = Decode::new(max_size_bytes, receive.clone());
-                        let protocol = FramedRead::new(conn, decode);
+        if let Some(tls) = tls {
+            let tls = TlsAcceptor::from(Arc::new(tls));
 
-                        // NOTE: The timeout stream wraps _the protocol_
-                        // That means it'll close the connection if it doesn't
-                        // produce a valid message within the timeframe, not just
-                        // whether or not it writes to the stream
-                        future::ready(Some(TimeoutStream::new(protocol, keep_alive)))
-                    }
-                    // The connection could not be established
-                    // Just ignore it
-                    Err(_) => future::ready(None),
-                }
-            })
-            .listen(1024)
+            self.0
+                .filter_map(move |conn| {
+                    Box::pin(accept_tls(
+                        conn,
+                        tls.clone(),
+                        keep_alive.clone(),
+                        max_size_bytes,
+                        receive.clone(),
+                    ))
+                })
+                .listen(1024)
+                .boxed()
+        } else {
+            self.0
+                .filter_map(move |conn| {
+                    Box::pin(accept(
+                        conn,
+                        keep_alive.clone(),
+                        max_size_bytes,
+                        receive.clone(),
+                    ))
+                })
+                .listen(1024)
+                .boxed()
+        }
     }
+}
+
+async fn accept_tls(
+    conn: Result<TcpStream, io::Error>,
+    tls: TlsAcceptor,
+    keep_alive: Duration,
+    max_size_bytes: usize,
+    receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + Unpin + Clone + 'static,
+) -> Option<impl Stream<Item = Result<Received, Error>>> {
+    match conn {
+        // The connection was successfully established
+        // Create a new protocol reader over it
+        // It'll get added to the connection pool
+        Ok(conn) => {
+            let conn = tls.accept(conn).await;
+
+            match conn {
+                Ok(conn) => accept_protocol(conn, keep_alive, max_size_bytes, receive).await,
+                Err(_) => None,
+            }
+        }
+        // The connection could not be established
+        // Just ignore it
+        Err(_) => None,
+    }
+}
+
+async fn accept(
+    conn: Result<TcpStream, io::Error>,
+    keep_alive: Duration,
+    max_size_bytes: usize,
+    receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + Unpin + Clone + 'static,
+) -> Option<impl Stream<Item = Result<Received, Error>>> {
+    match conn {
+        // The connection was successfully established
+        // Create a new protocol reader over it
+        // It'll get added to the connection pool
+        Ok(conn) => accept_protocol(conn, keep_alive, max_size_bytes, receive).await,
+        // The connection could not be established
+        // Just ignore it
+        Err(_) => None,
+    }
+}
+
+async fn accept_protocol(
+    conn: impl AsyncRead + Unpin,
+    keep_alive: Duration,
+    max_size_bytes: usize,
+    receive: impl FnMut(Bytes) -> Result<Option<Message>, Error> + Send + Sync + Unpin + Clone + 'static,
+) -> Option<impl Stream<Item = Result<Received, Error>>> {
+    let decode = Decode::new(max_size_bytes, receive.clone());
+    let protocol = FramedRead::new(conn, decode);
+
+    // NOTE: The timeout stream wraps _the protocol_
+    // That means it'll close the connection if it doesn't
+    // produce a valid message within the timeframe, not just
+    // whether or not it writes to the stream
+    Some(TimeoutStream::new(protocol, keep_alive))
 }
 
 struct TcpIncoming(TcpListener);

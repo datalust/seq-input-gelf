@@ -26,8 +26,8 @@ use libflate::{
 };
 
 use crate::{
-    Error,
     io::MemRead,
+    Error,
 };
 
 metrics! {
