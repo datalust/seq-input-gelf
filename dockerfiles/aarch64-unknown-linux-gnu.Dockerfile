@@ -1,6 +1,6 @@
-FROM --platform=linux/amd64 datalust/seqcli:latest
+FROM --platform=linux/arm/v8 datalust/seqcli:latest
 
-COPY target/x86_64-unknown-linux-musl/release/sqelf /bin/sqelf
+COPY target/aarch64-unknown-linux-gnu/release/sqelf /bin/sqelf
 COPY dockerfiles/run.sh /run.sh
 
 EXPOSE 12201
