@@ -1,5 +1,7 @@
 $ErrorActionPreference = "Stop"
 
+Switch-DockerLinux
+
 $RequiredRustToolchain = $(cat ./rust-toolchain)
 
 Invoke-WebRequest -OutFile ./rustup-init.exe -Uri https://win.rustup.rs
