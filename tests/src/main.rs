@@ -11,8 +11,8 @@ fn main() {
     let case = env::args().skip(1).next();
 
     if let Some(case) = case {
-        self::cases::test(case);
+        cases::test(case);
     } else {
-        self::cases::test_all();
+        cases::test_all();
     }
 }

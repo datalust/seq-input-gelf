@@ -1,15 +1,7 @@
-use std::{
-    env,
-    str::FromStr,
-};
+use std::{env, str::FromStr};
 
-use crate::{
-    diagnostics,
-    process,
-    receive,
-    server,
-    Error,
-};
+use crate::server::Certificate;
+use crate::{diagnostics, process, receive, server, Error};
 
 #[derive(Debug, Default, Clone)]
 pub struct Config {
@@ -41,6 +33,36 @@ impl Config {
             config.process.include_raw_payload = true;
         }
 
+        let certificate_path_var = if is_seq_app {
+            "SEQ_APP_SETTING_CERTIFICATEPATH"
+        } else {
+            "GELF_CERTIFICATE_PATH"
+        };
+        let certificate_password_path_var = if is_seq_app {
+            "SEQ_APP_SETTING_CERTIFICATEPASSWORDPATH"
+        } else {
+            "GELF_CERTIFICATE_PASSWORD_PATH"
+        };
+
+        if is_present(certificate_path_var)? {
+            let mut certificate = Certificate {
+                path: String::new(),
+                password_path: String::new(),
+            };
+
+            read_environment(&mut certificate.path, certificate_path_var)?;
+            read_environment(
+                &mut certificate.password_path,
+                certificate_password_path_var,
+            )?;
+
+            if certificate.password_path.is_empty() {
+                certificate.password_path = certificate.path.clone();
+            }
+
+            config.server.certificate = Some(certificate);
+        }
+
         Ok(config)
     }
 }
@@ -49,13 +71,21 @@ pub fn is_seq_app() -> bool {
     env::var("SEQ_APP_ID").is_ok()
 }
 
+fn is_present(name: impl AsRef<str>) -> Result<bool, Error> {
+    match env::var(name.as_ref()) {
+        Ok(ref v) if !v.is_empty() => Ok(true),
+        Ok(_) | Err(env::VarError::NotPresent) => Ok(false),
+        Err(e) => Err(e)?,
+    }
+}
+
 fn is_truthy(name: impl AsRef<str>) -> Result<bool, Error> {
     match env::var(name.as_ref()) {
-        // The evironment variable contains a truthy value
-        Ok(ref v) if v == "True" || v == "true" => return Ok(true),
+        // The environment variable contains a truthy value
+        Ok(ref v) if v == "True" || v == "true" => Ok(true),
         // The environment variable is not set or doesn't contain
         // a truthy value
-        Ok(_) | Err(env::VarError::NotPresent) => return Ok(false),
+        Ok(_) | Err(env::VarError::NotPresent) => Ok(false),
         // The environment variable is invalid
         Err(e) => Err(e)?,
     }

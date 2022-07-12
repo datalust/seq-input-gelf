@@ -20,6 +20,16 @@
         "helpText": "The url (protocol, IP address and port) on which the input will listen for GELF payloads. The default is `udp://0.0.0.0:12201`. Specifying the protocol as `tcp` will listen on TCP instead of UDP.",
         "isOptional": true
       },
+      "certificatePath": {
+        "displayName": "Certificate path",
+        "helpText": "The absolute path to a `.pem` certificate file to use for secure transport. This setting is only used when the protocol is TCP.",
+        "isOptional": true
+      },
+      "certificatePasswordPath": {
+        "displayName": "Certificate password path",
+        "helpText": "The absolute path to a `.pem` certificate file with the password for the certificate.",
+        "isOptional": true
+      },
       "enableDiagnostics": {
         "inputType": "Checkbox",
         "displayName": "Enable diagnostics",

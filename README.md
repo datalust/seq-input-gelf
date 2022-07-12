@@ -51,12 +51,14 @@ The container is published on Docker Hub as [`datalust/seq-input-gelf`](https://
 
 A `seq-input-gelf` container can be configured using the following environment variables:
 
-| Variable | Description | Default |
-| -------- | ----------- | ------- |
-| `SEQ_ADDRESS`| The address of the Seq server to forward events to | `http://localhost:5341` |
-| `SEQ_API_KEY` | The API key to use | - |
-| `GELF_ADDRESS` | The address to bind the GELF server to. The protocol may be `udp` or `tcp` | `udp://0.0.0.0:12201` |
-| `GELF_ENABLE_DIAGNOSTICS` | Whether to enable diagnostic logs and metrics (accepts `True` or `False`) | `False` |
+| Variable                         | Description                                                                  | Default                 |
+|----------------------------------|------------------------------------------------------------------------------|-------------------------|
+| `SEQ_ADDRESS`                    | The address of the Seq server to forward events to                           | `http://localhost:5341` |
+| `SEQ_API_KEY`                    | The API key to use                                                           | -                       |
+| `GELF_ADDRESS`                   | The address to bind the GELF server to. The protocol may be `udp` or `tcp`   | `udp://0.0.0.0:12201`   |
+| `GELF_ENABLE_DIAGNOSTICS`        | Whether to enable diagnostic logs and metrics (accepts `True` or `False`)    | `False`                 |
+| `GELF_CERTIFICATE_PATH`          | The path to a `.pem` file containing a certificate                           |                         |
+| `GELF_CERTIFICATE_PASSWORD_PATH` | The path to a `.pem` file containing a PKCS8 private key for the certificate |                         |
 
 ### Quick local setup with `docker-compose`
 

@@ -1,36 +1,20 @@
 use std::fs::File;
 use std::io::BufReader;
-use std::{
-    marker::Unpin,
-    str::FromStr,
-    time::Duration,
-};
+use std::{marker::Unpin, str::FromStr, time::Duration};
 
 use futures::{
-    future::{
-        BoxFuture,
-        Either,
-    },
-    select,
-    FutureExt,
-    StreamExt,
+    future::{BoxFuture, Either},
+    select, FutureExt, StreamExt,
 };
 
-use tokio::{
-    runtime::Runtime,
-    signal::ctrl_c,
-    sync::oneshot,
-};
+use tokio::{runtime::Runtime, signal::ctrl_c, sync::oneshot};
 
 use anyhow::Error;
 
 use bytes::Bytes;
 use tokio_rustls::rustls;
 
-use crate::{
-    diagnostics::*,
-    receive::Message,
-};
+use crate::{diagnostics::*, receive::Message};
 
 mod tcp;
 mod udp;
@@ -80,7 +64,13 @@ pub struct Bind {
 
 #[derive(Debug, Clone)]
 pub struct Certificate {
+    /**
+    Path to the `.pem` file containing the certificate.
+    */
     pub path: String,
+    /**
+    Path to the `.pem` file containing the certificate password.
+    */
     pub password_path: String,
 }
 
@@ -196,15 +186,16 @@ pub fn build(
                     password_path,
                 }) = config.certificate
                 {
-                    let mut reader = BufReader::new(File::open(path).unwrap());
-                    let cert = rustls_pemfile::certs(&mut reader)
-                        .unwrap()
+                    emit("Using TLS");
+
+                    let mut reader = BufReader::new(File::open(path)?);
+                    let cert = rustls_pemfile::certs(&mut reader)?
                         .into_iter()
                         .map(rustls::Certificate)
                         .collect();
 
-                    let mut reader = BufReader::new(File::open(password_path).unwrap());
-                    let mut keys = rustls_pemfile::rsa_private_keys(&mut reader).unwrap();
+                    let mut reader = BufReader::new(File::open(password_path)?);
+                    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)?;
 
                     let config = rustls::ServerConfig::builder()
                         .with_safe_defaults()

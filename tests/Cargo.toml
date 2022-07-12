@@ -20,3 +20,9 @@ version = "0.5"
 
 [dependencies.serde_json]
 version = "1.0"
+
+[dependencies.rustls]
+version = "0.20"
+
+[dependencies.rustls-native-certs]
+version = "0.6"
