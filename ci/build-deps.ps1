@@ -75,7 +75,12 @@ function Invoke-LinuxTests
     Write-BeginStep $MYINVOCATION
 
     Run-Command -Exe cargo -ArgumentList 'test', '--target x86_64-unknown-linux-gnu'
-    Run-Command -Exe cargo -ArgumentList 'run', '-p sqelf_tests', '--target x86_64-unknown-linux-gnu'
+
+    Push-Location tests
+    Run-Command -Exe ../tool/mkcert-linux-x64 -ArgumentList '-install'
+    Run-Command -Exe ../tool/mkcert-linux-x64 -ArgumentList '127.0.0.1', 'localhost'
+    Run-Command -Exe cargo -ArgumentList 'run'
+    Pop-Location
 }
 
 function Invoke-DockerBuild
