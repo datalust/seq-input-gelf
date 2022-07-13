@@ -27,7 +27,7 @@
       },
       "certificatePasswordPath": {
         "displayName": "Certificate password path",
-        "helpText": "The absolute path to a `.pem` certificate file with the password for the certificate.",
+        "helpText": "The absolute path to a `.pem` PKCS8 private key file. If this value is blank it will default to the certificate path.",
         "isOptional": true
       },
       "enableDiagnostics": {

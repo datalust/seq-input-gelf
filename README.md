@@ -58,7 +58,7 @@ A `seq-input-gelf` container can be configured using the following environment v
 | `GELF_ADDRESS`                   | The address to bind the GELF server to. The protocol may be `udp` or `tcp`   | `udp://0.0.0.0:12201`   |
 | `GELF_ENABLE_DIAGNOSTICS`        | Whether to enable diagnostic logs and metrics (accepts `True` or `False`)    | `False`                 |
 | `GELF_CERTIFICATE_PATH`          | The path to a `.pem` file containing a certificate                           |                         |
-| `GELF_CERTIFICATE_PASSWORD_PATH` | The path to a `.pem` file containing a PKCS8 private key for the certificate |                         |
+| `GELF_CERTIFICATE_PASSWORD_PATH` | The path to a `.pem` file containing a PKCS8 private key for the certificate | `GELF_CERTIFICATE_PATH` |
 
 ### Quick local setup with `docker-compose`
 
