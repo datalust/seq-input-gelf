@@ -21,12 +21,12 @@
         "isOptional": true
       },
       "certificatePath": {
-        "displayName": "Certificate path",
-        "helpText": "The absolute path to a `.pem` certificate file to use for secure transport. This setting is only used when the protocol is TCP.",
+        "displayName": "Certificate file path",
+        "helpText": "The absolute path to a `.pem` certificate file to use for secure transport. If the protocol is TCP this will force TLS on all connections. If the protocol is UDP this will fail.",
         "isOptional": true
       },
-      "certificatePasswordPath": {
-        "displayName": "Certificate password path",
+      "certificatePrivateKeyPath": {
+        "displayName": "Certificate private key file path",
         "helpText": "The absolute path to a `.pem` PKCS8 private key file. If this value is blank it will default to the certificate path.",
         "isOptional": true
       },

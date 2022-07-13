@@ -38,26 +38,26 @@ impl Config {
         } else {
             "GELF_CERTIFICATE_PATH"
         };
-        let certificate_password_path_var = if is_seq_app {
-            "SEQ_APP_SETTING_CERTIFICATEPASSWORDPATH"
+        let certificate_private_key_path_var = if is_seq_app {
+            "SEQ_APP_SETTING_CERTIFICATEPRIVATEKEYPATH"
         } else {
-            "GELF_CERTIFICATE_PASSWORD_PATH"
+            "GELF_CERTIFICATE_PRIVATE_KEY_PATH"
         };
 
         if is_present(certificate_path_var)? {
             let mut certificate = Certificate {
                 path: String::new(),
-                password_path: String::new(),
+                private_key_path: String::new(),
             };
 
             read_environment(&mut certificate.path, certificate_path_var)?;
             read_environment(
-                &mut certificate.password_path,
-                certificate_password_path_var,
+                &mut certificate.private_key_path,
+                certificate_private_key_path_var,
             )?;
 
-            if certificate.password_path.is_empty() {
-                certificate.password_path = certificate.path.clone();
+            if certificate.private_key_path.is_empty() {
+                certificate.private_key_path = certificate.path.clone();
             }
 
             config.server.certificate = Some(certificate);

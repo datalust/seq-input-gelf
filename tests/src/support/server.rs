@@ -16,7 +16,7 @@ pub struct Builder {
     tcp_max_size_bytes: u64,
     tcp_keep_alive_secs: u64,
     tcp_certificate_path: Option<String>,
-    tcp_certificate_password_path: Option<String>,
+    tcp_certificate_private_key_path: Option<String>,
     udp_max_chunks_per_message: u8,
 }
 
@@ -26,7 +26,7 @@ impl Builder {
             tcp_max_size_bytes: 512,
             tcp_keep_alive_secs: 10,
             tcp_certificate_path: None,
-            tcp_certificate_password_path: None,
+            tcp_certificate_private_key_path: None,
             udp_max_chunks_per_message: u8::MAX,
         }
     }
@@ -46,8 +46,8 @@ impl Builder {
         self
     }
 
-    pub fn tcp_certificate_password_path(mut self, v: impl Into<String>) -> Self {
-        self.tcp_certificate_password_path = Some(v.into());
+    pub fn tcp_certificate_private_key_path(mut self, v: impl Into<String>) -> Self {
+        self.tcp_certificate_private_key_path = Some(v.into());
         self
     }
 
@@ -70,7 +70,7 @@ impl Builder {
                     .take()
                     .map(|path| server::Certificate {
                         path: path.clone(),
-                        password_path: self.tcp_certificate_password_path.take().unwrap_or(path),
+                        private_key_path: self.tcp_certificate_private_key_path.take().unwrap_or(path),
                     }),
                 ..Default::default()
             },

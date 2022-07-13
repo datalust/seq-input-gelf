@@ -6,7 +6,7 @@ pub fn test() {
     if Path::new("127.0.0.1+1.pem").exists() {
         let mut server = builder()
             .tcp_certificate_path("127.0.0.1+1.pem")
-            .tcp_certificate_password_path("127.0.0.1+1-key.pem")
+            .tcp_certificate_private_key_path("127.0.0.1+1-key.pem")
             .tcp();
 
         let mut stream = tcp::tls_stream();

@@ -69,9 +69,9 @@ pub struct Certificate {
     */
     pub path: String,
     /**
-    Path to the `.pem` file containing the certificate password.
+    Path to the `.pem` file containing the certificate private key.
     */
-    pub password_path: String,
+    pub private_key_path: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -176,6 +176,10 @@ pub fn build(
     let server = async move {
         let incoming = match config.bind.protocol {
             Protocol::Udp => {
+                if config.certificate.is_some() {
+                    bail!("TLS is not supported when the protocol is UDP")
+                }
+
                 let server = udp::Server::bind(&addr).await?.build(receive);
 
                 Either::Left(server)
@@ -183,7 +187,7 @@ pub fn build(
             Protocol::Tcp => {
                 let tls_config = if let Some(Certificate {
                     path,
-                    password_path,
+                    private_key_path,
                 }) = config.certificate
                 {
                     emit("Using TLS");
@@ -194,14 +198,13 @@ pub fn build(
                         .map(rustls::Certificate)
                         .collect();
 
-                    let mut reader = BufReader::new(File::open(password_path)?);
+                    let mut reader = BufReader::new(File::open(private_key_path)?);
                     let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)?;
 
                     let config = rustls::ServerConfig::builder()
                         .with_safe_defaults()
                         .with_no_client_auth()
-                        .with_single_cert(cert, rustls::PrivateKey(keys.remove(0)))
-                        .unwrap();
+                        .with_single_cert(cert, rustls::PrivateKey(keys.remove(0)))?;
 
                     Some(config)
                 } else {
