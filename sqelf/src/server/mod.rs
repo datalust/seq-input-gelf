@@ -192,14 +192,18 @@ pub fn build(
                 {
                     emit("Using TLS");
 
-                    let mut reader = BufReader::new(File::open(path)?);
+                    let mut reader = BufReader::new(File::open(&path)?);
                     let cert = rustls_pemfile::certs(&mut reader)?
                         .into_iter()
                         .map(rustls::Certificate)
                         .collect();
 
-                    let mut reader = BufReader::new(File::open(private_key_path)?);
+                    let mut reader = BufReader::new(File::open(&private_key_path)?);
                     let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)?;
+
+                    if keys.len() == 0 {
+                        bail!(format!("The file `{}` used for the certificate private key doesn't contain any PKCS8 keys", private_key_path));
+                    }
 
                     let config = rustls::ServerConfig::builder()
                         .with_safe_defaults()
