@@ -4,11 +4,21 @@ pub mod str;
 
 use serde_json::Value;
 
-use self::str::{CachedString, Inlinable, Str};
+use self::str::{
+    CachedString,
+    Inlinable,
+    Str,
+};
 
-use crate::{io::MemRead, Error};
+use crate::{
+    io::MemRead,
+    Error,
+};
 
-use std::{collections::HashMap, io::Read};
+use std::{
+    collections::HashMap,
+    io::Read,
+};
 
 metrics! {
     msg

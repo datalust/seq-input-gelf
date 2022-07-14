@@ -31,4 +31,7 @@ pub mod process;
 pub mod receive;
 pub mod server;
 
-pub use self::{anyhow::Error, config::Config};
+pub use self::{
+    anyhow::Error,
+    config::Config,
+};

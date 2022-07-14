@@ -67,25 +67,30 @@ function Invoke-LinuxBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    Run-Command -Exe cargo -ArgumentList 'build', '--bin sqelf', '--release', '--target x86_64-unknown-linux-musl'
-    Run-Command -Exe cargo -ArgumentList 'build', '--bin sqelf', '--release', '--target aarch64-unknown-linux-musl'
+    Run-Command -Exe cross -ArgumentList 'build', '--bin sqelf', '--release', '--target x86_64-unknown-linux-gnu'
+    Run-Command -Exe cross -ArgumentList 'build', '--bin sqelf', '--release', '--target aarch64-unknown-linux-gnu'
 }
 function Invoke-LinuxTests
 {
     Write-BeginStep $MYINVOCATION
 
-    Run-Command -Exe cargo -ArgumentList 'test', '--target x86_64-unknown-linux-musl'
-    Run-Command -Exe cargo -ArgumentList 'run', '-p sqelf_tests', '--target x86_64-unknown-linux-musl'
+    Run-Command -Exe cargo -ArgumentList 'test', '--target x86_64-unknown-linux-gnu'
+
+    Push-Location tests
+    Run-Command -Exe ../tool/mkcert-linux-x64 -ArgumentList '-install'
+    Run-Command -Exe ../tool/mkcert-linux-x64 -ArgumentList '127.0.0.1', 'localhost'
+    Run-Command -Exe cargo -ArgumentList 'run'
+    Pop-Location
 }
 
 function Invoke-DockerBuild
 {
     Write-BeginStep $MYINVOCATION
 
-    docker buildx build --platform linux/amd64 --file dockerfiles/x86_64-unknown-linux-musl.Dockerfile -t sqelf-ci:latest-x64 .
+    docker buildx build --platform linux/amd64 --file dockerfiles/x86_64-unknown-linux-gnu.Dockerfile -t sqelf-ci:latest-x64 .
     if ($LASTEXITCODE) { exit 1 }
 
-    docker buildx build --platform linux/arm64 --file dockerfiles/aarch64-unknown-linux-musl.Dockerfile -t sqelf-ci:latest-arm64 .
+    docker buildx build --platform linux/arm64 --file dockerfiles/aarch64-unknown-linux-gnu.Dockerfile -t sqelf-ci:latest-arm64 .
     if ($LASTEXITCODE) { exit 1 }
 }
 

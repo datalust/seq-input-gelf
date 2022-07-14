@@ -15,8 +15,8 @@
   <files>
     <file src="seq-input-gelf.d.json" target="" />
     <file src="target/x86_64-pc-windows-msvc/release/sqelf.exe" target="win-x64" />
-    <file src="target/x86_64-unknown-linux-musl/release/sqelf" target="linux-x64/sqelf" />
-    <file src="target/aarch64-unknown-linux-musl/release/sqelf" target="linux-arm64/sqelf" />
+    <file src="target/x86_64-unknown-linux-gnu/release/sqelf" target="linux-x64/sqelf" />
+    <file src="target/aarch64-unknown-linux-gnu/release/sqelf" target="linux-arm64/sqelf" />
     <file src="asset/seq-input-gelf.png" target="" />
   </files>
 </package>

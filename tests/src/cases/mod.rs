@@ -20,5 +20,6 @@ cases! {
     tcp_multiple_conns,
     tcp_multiple_conns_partial,
     tcp_timeout_partial,
-    tcp_timeout_slow
+    tcp_timeout_slow,
+    tcp_tls
 }

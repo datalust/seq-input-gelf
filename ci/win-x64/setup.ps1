@@ -1,5 +1,7 @@
 $ErrorActionPreference = "Stop"
 
+Switch-DockerLinux
+
 $RequiredRustToolchain = $(cat ./rust-toolchain)
 
 Invoke-WebRequest -OutFile ./rustup-init.exe -Uri https://win.rustup.rs
@@ -9,10 +11,7 @@ if ($LASTEXITCODE) { exit 1 }
 
 $env:Path = "C:\Users\appveyor\.cargo\bin;$env:Path"
 
-& rustup target add x86_64-unknown-linux-musl
-if ($LASTEXITCODE) { exit 1 }
-
-& rustup target add aarch64-unknown-linux-musl
+& cargo install -f cross
 if ($LASTEXITCODE) { exit 1 }
 
 $ErrorActionPreference = "Stop"
