@@ -41,7 +41,7 @@ use futures::{
 
 use pin_utils::unsafe_pinned;
 
-use tokio::io::AsyncRead;
+use tokio::io::{AsyncRead, ReadBuf};
 use tokio::{
     net::{
         TcpListener,
@@ -130,7 +130,7 @@ async fn accept_tls(
             let conn = tls.accept(conn).await;
 
             match conn {
-                Ok(conn) => accept_protocol(conn, keep_alive, max_size_bytes, receive).await,
+                Ok(conn) => accept_protocol(QuietClose::new(conn), keep_alive, max_size_bytes, receive).await,
                 Err(_) => None,
             }
         }
@@ -173,6 +173,9 @@ async fn accept_protocol(
     Some(TimeoutStream::new(protocol, keep_alive))
 }
 
+/**
+A wrapper around a TCP listener that treats it like a stream of connections.
+*/
 struct TcpIncoming(TcpListener);
 
 impl Stream for TcpIncoming {
@@ -187,6 +190,44 @@ impl Stream for TcpIncoming {
     }
 }
 
+/**
+A wrapper around a TLS stream that handles connection closes.
+*/
+struct QuietClose<R> {
+    inner: R,
+}
+
+impl<R> QuietClose<R> {
+    unsafe_pinned!(inner: R);
+
+    fn new(read: R) -> Self {
+        QuietClose {
+            inner: read,
+        }
+    }
+}
+
+impl<R: AsyncRead> AsyncRead for QuietClose<R> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+        let inner = self.inner();
+
+        match inner.poll_read(cx, buf) {
+            Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Err(e)) => match e.kind() {
+                // The client connection was closed gracefully
+                io::ErrorKind::UnexpectedEof => Poll::Ready(Ok(())),
+                // The client connection was closed forcefully
+                io::ErrorKind::ConnectionReset => Poll::Ready(Ok(())),
+                _ => Poll::Ready(Err(e)),
+            }
+        }
+    }
+}
+
+/**
+An active set of connections that are processed fairly.
+*/
 struct Listen<S>
 where
     S: Stream,
@@ -391,8 +432,7 @@ where
     }
 
     fn decode_eof(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        // NOTE: We don't use `?` here because we never want to carry results
-        // We always want to match them and deal with error cases directly
+        // The `?` here propagates any error returned by `decode`
         Ok(match self.decode(src)? {
             Some(frame) => Some(frame),
             None => {
