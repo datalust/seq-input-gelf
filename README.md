@@ -81,7 +81,7 @@ services:
     ports:
       - "5341:80"
     environment:
-      ACCEPT_EULA: Y
+      ACCEPT_EULA: "Y"
     restart: unless-stopped
     volumes:
       - ./seq-data:/data
