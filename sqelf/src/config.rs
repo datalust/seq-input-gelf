@@ -1,7 +1,16 @@
-use std::{env, str::FromStr};
+use std::{
+    env,
+    str::FromStr,
+};
 
 use crate::server::Certificate;
-use crate::{diagnostics, process, receive, server, Error};
+use crate::{
+    diagnostics,
+    process,
+    receive,
+    server,
+    Error,
+};
 
 #[derive(Debug, Default, Clone)]
 pub struct Config {

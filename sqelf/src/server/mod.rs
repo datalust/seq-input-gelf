@@ -1,20 +1,36 @@
 use std::fs::File;
 use std::io::BufReader;
-use std::{marker::Unpin, str::FromStr, time::Duration};
-
-use futures::{
-    future::{BoxFuture, Either},
-    select, FutureExt, StreamExt,
+use std::{
+    marker::Unpin,
+    str::FromStr,
+    time::Duration,
 };
 
-use tokio::{runtime::Runtime, signal::ctrl_c, sync::oneshot};
+use futures::{
+    future::{
+        BoxFuture,
+        Either,
+    },
+    select,
+    FutureExt,
+    StreamExt,
+};
+
+use tokio::{
+    runtime::Runtime,
+    signal::ctrl_c,
+    sync::oneshot,
+};
 
 use anyhow::Error;
 
 use bytes::Bytes;
 use tokio_rustls::rustls;
 
-use crate::{diagnostics::*, receive::Message};
+use crate::{
+    diagnostics::*,
+    receive::Message,
+};
 
 mod tcp;
 mod udp;
@@ -247,7 +263,7 @@ pub fn build(
                             }
                             Err(err) => {
                                 increment!(server.process_err);
-                                emit_err(&err, "GELF processing failed");
+                                emit_err(err.as_ref(), "GELF processing failed");
                             }
                         }
                     },
@@ -258,13 +274,13 @@ pub fn build(
                     // An error occurred receiving a chunk
                     Some(Ok(Received::Error(err))) => {
                         increment!(server.receive_err);
-                        emit_err(&err, "GELF processing failed");
+                        emit_err(err.as_ref(), "GELF processing failed");
                         continue;
                     }
                     // An unrecoverable error occurred receiving a chunk
                     Some(Err(err)) => {
                         increment!(server.receive_err);
-                        emit_err(&err, "GELF processing failed irrecoverably");
+                        emit_err(err.as_ref(), "GELF processing failed irrecoverably");
                         break;
                     },
                     None => {
@@ -292,7 +308,7 @@ pub fn build(
     Ok(Server {
         fut: Box::pin(async move {
             if let Err(err) = server.await {
-                emit_err(&err, "GELF server failed");
+                emit_err(err.as_ref(), "GELF server failed");
             }
         }),
         handle,

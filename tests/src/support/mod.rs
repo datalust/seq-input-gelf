@@ -1,4 +1,7 @@
-use byteorder::{BigEndian, ByteOrder};
+use byteorder::{
+    BigEndian,
+    ByteOrder,
+};
 
 const SERVER_HOST: &'static str = "localhost";
 const SERVER_BIND: &'static str = "0.0.0.0:12202";
@@ -63,7 +66,10 @@ pub(crate) fn tcp_delim() -> Vec<Vec<u8>> {
 pub(crate) fn test_child(name: &str) -> bool {
     use std::{
         env,
-        process::{Command, Stdio},
+        process::{
+            Command,
+            Stdio,
+        },
     };
 
     let self_bin = env::args().next().expect("missing self command");
