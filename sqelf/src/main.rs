@@ -89,7 +89,7 @@ fn main() {
         .and_then(|inner| inner);
 
     if let Err(err) = run_server {
-        emit_err(&err, "GELF input failed");
+        emit_err(err.as_ref(), "GELF input failed");
         std::process::exit(1);
     }
 
