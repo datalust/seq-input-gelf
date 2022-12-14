@@ -3,7 +3,10 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::{
     io::Write,
-    net::{self, TcpStream},
+    net::{
+        self,
+        TcpStream,
+    },
 };
 
 use super::SERVER_ADDR;

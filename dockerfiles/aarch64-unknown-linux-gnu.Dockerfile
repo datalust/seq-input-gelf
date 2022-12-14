@@ -1,4 +1,4 @@
-FROM --platform=linux/arm/v8 datalust/seqcli:latest
+FROM --platform=linux/arm64 datalust/seqcli:latest
 
 COPY target/aarch64-unknown-linux-gnu/release/sqelf /bin/sqelf
 COPY dockerfiles/run.sh /run.sh

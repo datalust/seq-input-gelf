@@ -523,4 +523,20 @@ mod tests {
 
         assert!(err.to_string().contains(gelf));
     }
+
+    #[test]
+    fn non_utf8_input_includes_some_raw_content() {
+        let gelf = &"🦫".as_bytes()[0..3];
+
+        let process = Process::new(Config {
+            include_raw_payload: true,
+            ..Default::default()
+        });
+
+        let err = process
+            .with_clef(gelf, |_| unreachable!())
+            .expect_err("expected parsing to fail");
+
+        assert!(err.to_string().contains(&*String::from_utf8_lossy(gelf)));
+    }
 }

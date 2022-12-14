@@ -41,7 +41,10 @@ use futures::{
 
 use pin_utils::unsafe_pinned;
 
-use tokio::io::{AsyncRead, ReadBuf};
+use tokio::io::{
+    AsyncRead,
+    ReadBuf,
+};
 use tokio::{
     net::{
         TcpListener,
@@ -130,7 +133,10 @@ async fn accept_tls(
             let conn = tls.accept(conn).await;
 
             match conn {
-                Ok(conn) => accept_protocol(QuietClose::new(conn), keep_alive, max_size_bytes, receive).await,
+                Ok(conn) => {
+                    accept_protocol(QuietClose::new(conn), keep_alive, max_size_bytes, receive)
+                        .await
+                }
                 Err(_) => None,
             }
         }
@@ -201,14 +207,16 @@ impl<R> QuietClose<R> {
     unsafe_pinned!(inner: R);
 
     fn new(read: R) -> Self {
-        QuietClose {
-            inner: read,
-        }
+        QuietClose { inner: read }
     }
 }
 
 impl<R: AsyncRead> AsyncRead for QuietClose<R> {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
         let inner = self.inner();
 
         match inner.poll_read(cx, buf) {
@@ -220,7 +228,7 @@ impl<R: AsyncRead> AsyncRead for QuietClose<R> {
                 // The client connection was closed forcefully
                 io::ErrorKind::ConnectionReset => Poll::Ready(Ok(())),
                 _ => Poll::Ready(Err(e)),
-            }
+            },
         }
     }
 }
@@ -286,7 +294,7 @@ where
                         // It's closed on drop and the next connection will be polled.
                         Err(err) => {
                             increment!(server.receive_err);
-                            emit_debug_err(&err, "GELF TCP client failed");
+                            emit_debug_err(err.as_ref(), "GELF TCP client failed");
 
                             continue 'poll_conns;
                         }

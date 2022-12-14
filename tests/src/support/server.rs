@@ -1,14 +1,24 @@
 use std::{
-    sync::{Arc, Mutex},
+    sync::{
+        Arc,
+        Mutex,
+    },
     thread,
     time::Duration,
 };
 
-use crossbeam_channel::{self, Receiver};
+use crossbeam_channel::{
+    self,
+    Receiver,
+};
 
 use serde_json::Value;
 
-use sqelf::{process, receive, server};
+use sqelf::{
+    process,
+    receive,
+    server,
+};
 
 use super::SERVER_BIND;
 
@@ -70,7 +80,10 @@ impl Builder {
                     .take()
                     .map(|path| server::Certificate {
                         path: path.clone(),
-                        private_key_path: self.tcp_certificate_private_key_path.take().unwrap_or(path),
+                        private_key_path: self
+                            .tcp_certificate_private_key_path
+                            .take()
+                            .unwrap_or(path),
                     }),
                 ..Default::default()
             },
