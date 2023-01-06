@@ -13,7 +13,7 @@ path = "../sqelf"
 version = "1.0"
 
 [dependencies.tokio]
-version = "1.8"
+version = "1.18"
 
 [dependencies.crossbeam-channel]
 version = "0.5"
