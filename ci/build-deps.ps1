@@ -194,7 +194,7 @@ function Start-SeqEnvironment($protocol) {
     }
 
     # Give Seq enough time to start up
-    Start-Sleep -Seconds 5
+    Start-Sleep -Seconds 10
 
     $ErrorActionPreference = "Stop"
 
@@ -246,7 +246,7 @@ function Invoke-TestApp($protocol) {
     if ($LASTEXITCODE) { exit 1 }
 
     # Give sqelf enough time to batch and send
-    Start-Sleep -Seconds 5
+    Start-Sleep -Seconds 10
 }
 
 function Check-ClefOutput {
