@@ -90,7 +90,7 @@ function Invoke-DockerBuild
     docker buildx build --platform linux/amd64 --file dockerfiles/x86_64-unknown-linux-gnu.Dockerfile -t sqelf-ci:latest-x64 .
     if ($LASTEXITCODE) { exit 1 }
 
-    docker buildx build --platform linux/arm64 --file dockerfiles/aarch64-unknown-linux-gnu.Dockerfile -t sqelf-ci:latest-arm64 .
+    docker buildx build --platform linux/arm64/v8 --file dockerfiles/aarch64-unknown-linux-gnu.Dockerfile -t sqelf-ci:latest-arm64 .
     if ($LASTEXITCODE) { exit 1 }
 }
 
@@ -194,7 +194,7 @@ function Start-SeqEnvironment($protocol) {
     }
 
     # Give Seq enough time to start up
-    Start-Sleep -Seconds 5
+    Start-Sleep -Seconds 10
 
     $ErrorActionPreference = "Stop"
 
@@ -246,7 +246,7 @@ function Invoke-TestApp($protocol) {
     if ($LASTEXITCODE) { exit 1 }
 
     # Give sqelf enough time to batch and send
-    Start-Sleep -Seconds 5
+    Start-Sleep -Seconds 10
 }
 
 function Check-ClefOutput {

@@ -13,7 +13,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 cargo install -f cross
 
-docker run --privileged --rm docker/binfmt:a7996909642ee92942dcd6cff44b9b95f08dad64
+docker run --privileged --rm linuxkit/binfmt:bebbae0c1100ebf7bf2ad4dfb9dfd719cf0ef132
 sudo service docker restart
 
 ls /home/appveyor
