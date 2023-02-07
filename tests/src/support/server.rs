@@ -25,6 +25,8 @@ use super::SERVER_BIND;
 pub struct Builder {
     tcp_max_size_bytes: u64,
     tcp_keep_alive_secs: u64,
+    tcp_certificate_path: Option<String>,
+    tcp_certificate_private_key_path: Option<String>,
     udp_max_chunks_per_message: u8,
 }
 
@@ -33,6 +35,8 @@ impl Builder {
         Builder {
             tcp_max_size_bytes: 512,
             tcp_keep_alive_secs: 10,
+            tcp_certificate_path: None,
+            tcp_certificate_private_key_path: None,
             udp_max_chunks_per_message: u8::MAX,
         }
     }
@@ -47,12 +51,22 @@ impl Builder {
         self
     }
 
+    pub fn tcp_certificate_path(mut self, v: impl Into<String>) -> Self {
+        self.tcp_certificate_path = Some(v.into());
+        self
+    }
+
+    pub fn tcp_certificate_private_key_path(mut self, v: impl Into<String>) -> Self {
+        self.tcp_certificate_private_key_path = Some(v.into());
+        self
+    }
+
     pub fn udp_max_chunks(mut self, v: u8) -> Self {
         self.udp_max_chunks_per_message = v;
         self
     }
 
-    fn build(self, protocol: server::Protocol) -> Server {
+    fn build(mut self, protocol: server::Protocol) -> Server {
         Server::new(
             server::Config {
                 bind: server::Bind {
@@ -61,12 +75,22 @@ impl Builder {
                 },
                 tcp_max_size_bytes: self.tcp_max_size_bytes,
                 tcp_keep_alive_secs: self.tcp_keep_alive_secs,
+                certificate: self
+                    .tcp_certificate_path
+                    .take()
+                    .map(|path| server::Certificate {
+                        path: path.clone(),
+                        private_key_path: self
+                            .tcp_certificate_private_key_path
+                            .take()
+                            .unwrap_or(path),
+                    }),
                 ..Default::default()
             },
             receive::Config {
                 max_chunks_per_message: self.udp_max_chunks_per_message,
                 ..Default::default()
-            }
+            },
         )
     }
 

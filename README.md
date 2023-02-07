@@ -1,4 +1,4 @@
-# `sqelf` [![Build status](https://ci.appveyor.com/api/projects/status/t32q67tvbvsgjxck?svg=true)](https://ci.appveyor.com/project/datalust/sqelf) [![Seq.Input.Gelf](https://img.shields.io/nuget/v/Seq.Input.Gelf.svg?style=flat)](https://nuget.org/packages/Seq.Input.Gelf) [![datalust/sqelf](https://img.shields.io/badge/docker-datalust%2Fsqelf-yellowgreen.svg)](https://hub.docker.com/r/datalust/sqelf)
+# Seq GELF Input [![Build status](https://ci.appveyor.com/api/projects/status/t32q67tvbvsgjxck?svg=true)](https://ci.appveyor.com/project/datalust/sqelf) [![Seq.Input.Gelf](https://img.shields.io/nuget/v/Seq.Input.Gelf.svg?style=flat)](https://nuget.org/packages/Seq.Input.Gelf) [![datalust/seq-input-gelf](https://img.shields.io/badge/docker-datalust%2Fseq--input--gelf-yellowgreen.svg)](https://hub.docker.com/r/datalust/seq-input-gelf)
 
 Ingest [Graylog Extended Log Format (GELF) messages](http://docs.graylog.org/en/2.5/pages/gelf.html) via UDP or TCP into [Seq](https://datalust.co/seq). The app is packaged both as a plug-in Seq App for all platforms, and as a standalone Docker container that forwards events to Seq via its HTTP API.
 
@@ -51,12 +51,14 @@ The container is published on Docker Hub as [`datalust/seq-input-gelf`](https://
 
 A `seq-input-gelf` container can be configured using the following environment variables:
 
-| Variable | Description | Default |
-| -------- | ----------- | ------- |
-| `SEQ_ADDRESS`| The address of the Seq server to forward events to | `http://localhost:5341` |
-| `SEQ_API_KEY` | The API key to use | - |
-| `GELF_ADDRESS` | The address to bind the GELF server to. The protocol may be `udp` or `tcp` | `udp://0.0.0.0:12201` |
-| `GELF_ENABLE_DIAGNOSTICS` | Whether to enable diagnostic logs and metrics (accepts `True` or `False`) | `False` |
+| Variable                            | Description                                                                  | Default                 |
+|-------------------------------------|------------------------------------------------------------------------------|-------------------------|
+| `SEQ_ADDRESS`                       | The address of the Seq server to forward events to                           | `http://localhost:5341` |
+| `SEQ_API_KEY`                       | The API key to use                                                           | -                       |
+| `GELF_ADDRESS`                      | The address to bind the GELF server to. The protocol may be `udp` or `tcp`   | `udp://0.0.0.0:12201`   |
+| `GELF_ENABLE_DIAGNOSTICS`           | Whether to enable diagnostic logs and metrics (accepts `True` or `False`)    | `False`                 |
+| `GELF_CERTIFICATE_PATH`             | The path to a `.pem` file containing a certificate (TCP only)                |                         |
+| `GELF_CERTIFICATE_PRIVATE_KEY_PATH` | The path to a `.pem` file containing a PKCS8 private key for the certificate | `GELF_CERTIFICATE_PATH` |
 
 ### Quick local setup with `docker-compose`
 
@@ -79,7 +81,7 @@ services:
     ports:
       - "5341:80"
     environment:
-      ACCEPT_EULA: Y
+      ACCEPT_EULA: "Y"
     restart: unless-stopped
     volumes:
       - ./seq-data:/data

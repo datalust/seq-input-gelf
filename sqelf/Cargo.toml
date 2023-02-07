@@ -5,6 +5,10 @@ authors = ["Datalust"]
 edition = "2018"
 license = "Apache-2.0"
 
+[features]
+default = ["tls"]
+tls = ["tokio-rustls", "rustls-pemfile"]
+
 [dependencies.futures]
 version = "0.3.0"
 
@@ -12,12 +16,20 @@ version = "0.3.0"
 version = "0.1.0-alpha.4"
 
 [dependencies.tokio]
-version = "1.8"
+version = "1.24"
 features = ["signal", "sync", "net", "time", "rt", "rt-multi-thread"]
 
 [dependencies.tokio-util]
 version = "0.6.0"
 features = ["net", "codec"]
+
+[dependencies.tokio-rustls]
+version = "0.23"
+optional = true
+
+[dependencies.rustls-pemfile]
+version = "1"
+optional = true
 
 [dependencies.bytes]
 version = "1.0"

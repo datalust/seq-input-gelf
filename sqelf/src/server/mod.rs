@@ -1,3 +1,5 @@
+use std::fs::File;
+use std::io::BufReader;
 use std::{
     marker::Unpin,
     str::FromStr,
@@ -23,6 +25,7 @@ use tokio::{
 use anyhow::Error;
 
 use bytes::Bytes;
+use tokio_rustls::rustls;
 
 use crate::{
     diagnostics::*,
@@ -63,12 +66,28 @@ pub struct Config {
     The maximum size of a single event before it'll be discarded.
     */
     pub tcp_max_size_bytes: u64,
+    /**
+    The path to a PEM certificate file.
+    */
+    pub certificate: Option<Certificate>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Bind {
     pub addr: String,
     pub protocol: Protocol,
+}
+
+#[derive(Debug, Clone)]
+pub struct Certificate {
+    /**
+    Path to the `.pem` file containing the certificate.
+    */
+    pub path: String,
+    /**
+    Path to the `.pem` file containing the certificate private key.
+    */
+    pub private_key_path: String,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -107,6 +126,7 @@ impl Default for Config {
             },
             tcp_keep_alive_secs: 2 * 60,    // 2 minutes
             tcp_max_size_bytes: 1024 * 256, // 256kiB
+            certificate: None,
         }
     }
 }
@@ -172,14 +192,49 @@ pub fn build(
     let server = async move {
         let incoming = match config.bind.protocol {
             Protocol::Udp => {
+                if config.certificate.is_some() {
+                    bail!("TLS is not supported when the protocol is UDP")
+                }
+
                 let server = udp::Server::bind(&addr).await?.build(receive);
 
                 Either::Left(server)
             }
             Protocol::Tcp => {
+                let tls_config = if let Some(Certificate {
+                    path,
+                    private_key_path,
+                }) = config.certificate
+                {
+                    emit("Using TLS");
+
+                    let mut reader = BufReader::new(File::open(&path)?);
+                    let cert = rustls_pemfile::certs(&mut reader)?
+                        .into_iter()
+                        .map(rustls::Certificate)
+                        .collect();
+
+                    let mut reader = BufReader::new(File::open(&private_key_path)?);
+                    let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)?;
+
+                    if keys.len() == 0 {
+                        bail!(format!("The file `{}` used for the certificate private key doesn't contain any PKCS8 keys", private_key_path));
+                    }
+
+                    let config = rustls::ServerConfig::builder()
+                        .with_safe_defaults()
+                        .with_no_client_auth()
+                        .with_single_cert(cert, rustls::PrivateKey(keys.remove(0)))?;
+
+                    Some(config)
+                } else {
+                    None
+                };
+
                 let server = tcp::Server::bind(&addr).await?.build(
                     Duration::from_secs(config.tcp_keep_alive_secs),
                     config.tcp_max_size_bytes as usize,
+                    tls_config,
                     receive,
                 );
 
@@ -208,7 +263,7 @@ pub fn build(
                             }
                             Err(err) => {
                                 increment!(server.process_err);
-                                emit_err(&err, "GELF processing failed");
+                                emit_err(err.as_ref(), "GELF processing failed");
                             }
                         }
                     },
@@ -219,13 +274,13 @@ pub fn build(
                     // An error occurred receiving a chunk
                     Some(Ok(Received::Error(err))) => {
                         increment!(server.receive_err);
-                        emit_err(&err, "GELF processing failed");
+                        emit_err(err.as_ref(), "GELF processing failed");
                         continue;
                     }
                     // An unrecoverable error occurred receiving a chunk
                     Some(Err(err)) => {
                         increment!(server.receive_err);
-                        emit_err(&err, "GELF processing failed irrecoverably");
+                        emit_err(err.as_ref(), "GELF processing failed irrecoverably");
                         break;
                     },
                     None => {
@@ -253,7 +308,7 @@ pub fn build(
     Ok(Server {
         fut: Box::pin(async move {
             if let Err(err) = server.await {
-                emit_err(&err, "GELF server failed");
+                emit_err(err.as_ref(), "GELF server failed");
             }
         }),
         handle,

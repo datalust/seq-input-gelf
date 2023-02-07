@@ -5,7 +5,6 @@ use chrono::{
 };
 use std::{
     collections::HashMap,
-    fmt::Display,
     ops::Drop,
     str::FromStr,
     sync::{
@@ -207,22 +206,34 @@ pub fn emit(message_template: &'static str) {
     }
 }
 
-pub fn emit_debug_err(error: &impl Display, message_template: &'static str) {
+pub fn emit_debug_err(error: &(dyn std::error::Error + 'static), message_template: &'static str) {
     if MIN_LEVEL.includes(Level::Debug) {
-        let err_str = format!("{}", error);
+        let err_str = format_error(error);
         let evt = DiagnosticEvent::new("DEBUG", Some(&err_str), &message_template, None);
         let json = serde_json::to_string(&evt).expect("infallible JSON");
         eprintln!("{}", json);
     }
 }
 
-pub fn emit_err(error: &impl Display, message_template: &'static str) {
+pub fn emit_err(error: &(dyn std::error::Error + 'static), message_template: &'static str) {
     if MIN_LEVEL.includes(Level::Error) {
-        let err_str = format!("{}", error);
+        let err_str = format_error(error);
         let evt = DiagnosticEvent::new("ERROR", Some(&err_str), &message_template, None);
         let json = serde_json::to_string(&evt).expect("infallible JSON");
         eprintln!("{}", json);
     }
+}
+
+fn format_error(error: &(dyn std::error::Error + 'static)) -> String {
+    use std::fmt::Write as _;
+
+    let mut s = format!("{}", error);
+
+    for source in std::iter::successors(error.source(), |&source| source.source()) {
+        let _ = write!(&mut s, ": {}", source);
+    }
+
+    s
 }
 
 fn emit_metrics() {

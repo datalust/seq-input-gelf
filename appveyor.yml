@@ -1,4 +1,4 @@
-version: '2.0.{build}'
+version: '3.0.{build}'
 skip_tags: true
 image:
 - Visual Studio 2019
@@ -30,7 +30,7 @@ for:
   deploy:
   - provider: NuGet
     api_key:
-      secure: Bw2jeLNKoBIPfsSR+n2ZaaK6eyKpHj0jF1dudtYPHzdNR46GDW5Mhmoc3/fLa172
+      secure: cz8wMs5d2zZWWJcizBP1ojfcb4VoOIvDhqUDzslTn0V0dHzFNOYLrjCRxJR+KEKD
     skip_symbols: true
     artifact: /Seq.Input.Gelf.*\.nupkg/
     on:

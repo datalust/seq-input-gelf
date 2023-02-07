@@ -13,10 +13,16 @@ path = "../sqelf"
 version = "1.0"
 
 [dependencies.tokio]
-version = "1.8"
+version = "1.24"
 
 [dependencies.crossbeam-channel]
 version = "0.5"
 
 [dependencies.serde_json]
 version = "1.0"
+
+[dependencies.rustls]
+version = "0.20"
+
+[dependencies.rustls-native-certs]
+version = "0.6"

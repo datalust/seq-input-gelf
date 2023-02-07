@@ -1,12 +1,23 @@
 use std::{
     collections::HashMap,
     fmt,
-    time::{Duration, SystemTime},
+    time::{
+        Duration,
+        SystemTime,
+    },
 };
 
 use serde::{
-    de::{self, Deserialize, Deserializer, Visitor},
-    ser::{Serialize, Serializer},
+    de::{
+        self,
+        Deserialize,
+        Deserializer,
+        Visitor,
+    },
+    ser::{
+        Serialize,
+        Serializer,
+    },
 };
 
 use serde_json::Value;
@@ -72,9 +83,10 @@ impl Timestamp {
         let scaled_fract = fract.to_u32()?;
         let nanos = scaled_fract * 10u32.pow(9 - ts.scale());
 
-        Some(Timestamp(
-            SystemTime::UNIX_EPOCH + Duration::new(secs, nanos),
-        ))
+        // If the timestamp would overflow then return `None`
+        SystemTime::UNIX_EPOCH
+            .checked_add(Duration::new(secs, nanos))
+            .map(Timestamp)
     }
 }
 
@@ -133,5 +145,23 @@ impl<'a> Message<'a> {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn timestamp_from_decimal() {
+        let ts = Timestamp::from_decimal(Decimal::new(1666223567, 0)).unwrap();
+
+        assert_eq!("\"2022-10-19T23:52:47Z\"", serde_json::to_string(&ts).unwrap());
+    }
+
+    #[test]
+    fn timestamp_from_decimal_overflow() {
+        // Ensure we don't panic on timestamps that are out of range
+        assert!(Timestamp::from_decimal(Decimal::from_i128_with_scale(u64::MAX as i128, 0)).is_none());
     }
 }

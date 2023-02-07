@@ -4,11 +4,21 @@ pub mod str;
 
 use serde_json::Value;
 
-use self::str::{CachedString, Inlinable, Str};
+use self::str::{
+    CachedString,
+    Inlinable,
+    Str,
+};
 
-use crate::{io::MemRead, Error};
+use crate::{
+    io::MemRead,
+    Error,
+};
 
-use std::{collections::HashMap, io::Read};
+use std::{
+    collections::HashMap,
+    io::Read,
+};
 
 metrics! {
     msg
@@ -512,5 +522,21 @@ mod tests {
             .expect_err("expected parsing to fail");
 
         assert!(err.to_string().contains(gelf));
+    }
+
+    #[test]
+    fn non_utf8_input_includes_some_raw_content() {
+        let gelf = &"🦫".as_bytes()[0..3];
+
+        let process = Process::new(Config {
+            include_raw_payload: true,
+            ..Default::default()
+        });
+
+        let err = process
+            .with_clef(gelf, |_| unreachable!())
+            .expect_err("expected parsing to fail");
+
+        assert!(err.to_string().contains(&*String::from_utf8_lossy(gelf)));
     }
 }

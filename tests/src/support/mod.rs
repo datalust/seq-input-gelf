@@ -3,6 +3,7 @@ use byteorder::{
     ByteOrder,
 };
 
+const SERVER_HOST: &'static str = "localhost";
 const SERVER_BIND: &'static str = "0.0.0.0:12202";
 const SERVER_ADDR: &'static str = "127.0.0.1:12202";
 
