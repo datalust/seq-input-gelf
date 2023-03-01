@@ -25,7 +25,7 @@ for:
   - ps: $env:Path = "C:\Users\appveyor\.cargo\bin;$env:Path"
 
   build_script:
-  - ps: ./ci/win-x64/build.ps1 -shortver "$($env:APPVEYOR_BUILD_VERSION)"
+  - ps: ./ci/win-x64/build.ps1 -shortver "$($env:APPVEYOR_BUILD_VERSION)" -branch "$($env:APPVEYOR_REPO_BRANCH)"
 
   deploy:
   - provider: NuGet
@@ -45,7 +45,7 @@ for:
   - ps: $env:PATH = "/home/appveyor/.cargo/bin:$env:PATH"
 
   build_script:
-  - ps: ./ci/linux-x64/build.ps1 -shortver "$($env:APPVEYOR_BUILD_VERSION)"
+  - ps: ./ci/linux-x64/build.ps1 -shortver "$($env:APPVEYOR_BUILD_VERSION)" -branch "$($env:APPVEYOR_REPO_BRANCH)"
 
 artifacts:
 - path: publish\*
