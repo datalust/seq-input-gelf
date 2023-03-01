@@ -1,5 +1,6 @@
 param (
-  [string] $shortver = "99.99.99"
+  [string] $shortver = "99.99.99",
+  [string] $branch = "dev"
 )
 
 $ErrorActionPreference = "Stop"
