@@ -5,6 +5,10 @@ param (
 $ErrorActionPreference = "Stop"
 Push-Location "$PSScriptRoot/../../"
 
+if ($branch -ne "main") {
+    $shortver = "$shortver-$branch"
+}
+
 . "./ci/build-deps.ps1"
 
 function Invoke-SmokeTest($protocol) {
