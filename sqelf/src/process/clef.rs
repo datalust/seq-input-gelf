@@ -156,12 +156,17 @@ mod tests {
     fn timestamp_from_decimal() {
         let ts = Timestamp::from_decimal(Decimal::new(1666223567, 0)).unwrap();
 
-        assert_eq!("\"2022-10-19T23:52:47Z\"", serde_json::to_string(&ts).unwrap());
+        assert_eq!(
+            "\"2022-10-19T23:52:47Z\"",
+            serde_json::to_string(&ts).unwrap()
+        );
     }
 
     #[test]
     fn timestamp_from_decimal_overflow() {
         // Ensure we don't panic on timestamps that are out of range
-        assert!(Timestamp::from_decimal(Decimal::from_i128_with_scale(u64::MAX as i128, 0)).is_none());
+        assert!(
+            Timestamp::from_decimal(Decimal::from_i128_with_scale(u64::MAX as i128, 0)).is_none()
+        );
     }
 }

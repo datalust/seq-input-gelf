@@ -11,8 +11,6 @@ pub mod server;
 pub mod tcp;
 pub mod udp;
 
-pub use serde_json::Value;
-
 macro_rules! net_chunks {
     ($(..$net_chunks:expr),+) => {{
         let mut v = Vec::new();
