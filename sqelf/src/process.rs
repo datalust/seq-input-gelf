@@ -151,7 +151,7 @@ where
     If fields conflict, then the lower-priority field is included with a
     double-underscore-prefixed name, e.g.: "__host".
     */
-    fn to_clef(&self) -> clef::Message {
+    fn to_clef(&'_ self) -> clef::Message<'_> {
         #![deny(unused_variables)]
 
         let gelf::Message {
