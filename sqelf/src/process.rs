@@ -2,7 +2,10 @@ pub mod clef;
 mod gelf;
 pub mod str;
 
-use serde_json::{Number, Value};
+use serde_json::{
+    Number,
+    Value,
+};
 
 use self::str::{
     CachedString,
@@ -236,7 +239,9 @@ where
                         s = s[2..].to_owned();
                     }
                     if let Ok(n) = u64::from_str_radix(&s, 16) {
-                        clef.event_type = Some(Value::Number(Number::from_u128(n as u128).expect("u64 is a representable number")));
+                        clef.event_type = Some(Value::Number(
+                            Number::from_u128(n as u128).expect("u64 is a representable number"),
+                        ));
                     }
                 }
             }
@@ -262,7 +267,8 @@ where
                 // The byte slicing here is fine, since `@` is a single UTF-8 byte.
                 // We silently ignore conflicts here, there's no great benefit to gain by
                 // detecting them.
-                clef.additional.insert(Str::Owned("@".to_string() + k.as_ref()), v);
+                clef.additional
+                    .insert(Str::Owned("@".to_string() + k.as_ref()), v);
             } else {
                 clef.additional.insert(k, v);
             }
@@ -366,7 +372,11 @@ fn sanitize_hex(field: Option<Str>, required_len: usize) -> Option<Str> {
         return None;
     }
 
-    if field.as_ref().bytes().any(|c| !c.is_ascii_hexdigit() || c.is_ascii_uppercase()) {
+    if field
+        .as_ref()
+        .bytes()
+        .any(|c| !c.is_ascii_hexdigit() || c.is_ascii_uppercase())
+    {
         return None;
     }
 

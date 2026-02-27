@@ -84,23 +84,23 @@ pub struct Message<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(borrow)]
     pub span_id: Option<Str<'a>>,
-    
+
     #[serde(rename = "@ps")]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(borrow)]
     pub parent_span_id: Option<Str<'a>>,
-    
+
     #[serde(rename = "@sk")]
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(borrow)]
     pub span_kind: Option<Str<'a>>,
-    
+
     // 2026.x metric definitions; this does have a set schema but ingestion tolerates
     // invalid content.
     #[serde(rename = "@d")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub definitions: Option<HashMap<Str<'a>, Value>>,
-    
+
     // Everything else
     #[serde(flatten)]
     pub additional: HashMap<Str<'a>, Value>,
