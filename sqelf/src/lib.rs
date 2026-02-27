@@ -11,7 +11,7 @@ over properties are made.
 */
 
 #![recursion_limit = "256"]
-#![deny(unsafe_code)]
+#![deny(unsafe_code, warnings)]
 
 #[macro_use]
 extern crate lazy_static;

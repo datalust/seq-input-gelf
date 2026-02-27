@@ -2,7 +2,10 @@ pub mod clef;
 mod gelf;
 pub mod str;
 
-use serde_json::Value;
+use serde_json::{
+    Number,
+    Value,
+};
 
 use self::str::{
     CachedString,
@@ -151,7 +154,7 @@ where
     If fields conflict, then the lower-priority field is included with a
     double-underscore-prefixed name, e.g.: "__host".
     */
-    fn to_clef(&self) -> clef::Message {
+    fn to_clef(&'_ self) -> clef::Message<'_> {
         #![deny(unused_variables)]
 
         let gelf::Message {
@@ -222,6 +225,56 @@ where
             clef.message = Self::find_first(&clef.additional, &["message", "msg", "MSG"])
                 .and_then(Str::try_from_value)
                 .map(|s| s.into_owned());
+        }
+
+        // Only numbers are useful on the Seq side; some legacy emitters create hex strings.
+        if let Some(event_type) = clef.event_type.take() {
+            match event_type {
+                Value::Null | Value::Bool(_) | Value::Array(_) | Value::Object(_) => {}
+                Value::Number(_) => {
+                    clef.event_type = Some(event_type);
+                }
+                Value::String(s) => {
+                    let s = if s.starts_with("0x") {
+                        &s[2..]
+                    } else {
+                        s.as_ref()
+                    };
+
+                    if let Ok(n) = u64::from_str_radix(s, 16) {
+                        clef.event_type = Some(Value::Number(
+                            Number::from_u128(n as u128).expect("u64 is a representable number"),
+                        ));
+                    }
+                }
+            }
+        }
+
+        clef.trace_id = sanitize_hex(clef.trace_id.take(), 32);
+        clef.span_id = sanitize_hex(clef.span_id.take(), 16);
+        clef.parent_span_id = sanitize_hex(clef.parent_span_id.take(), 16);
+
+        if let Some(span_kind) = clef.span_kind.take() {
+            // Defensively santized; if processed client-side in C#, only .NET `ActivityKind`
+            // members are allowed.
+            clef.span_kind = match span_kind.as_ref() {
+                "Internal" | "Client" | "Server" | "Producer" | "Consumer" => Some(span_kind),
+                _ => None,
+            };
+        }
+
+        // Sanitize unrecognized CLEF fields; we don't arbitrarily pass these through,
+        // because they may be rejected at ingestion time.
+        for (k, v) in std::mem::take(&mut clef.additional) {
+            if k.as_ref().starts_with("@") && !k.as_ref().starts_with("@@") {
+                // The byte slicing here is fine, since `@` is a single UTF-8 byte.
+                // We silently ignore conflicts here, there's no great benefit to gain by
+                // detecting them.
+                clef.additional
+                    .insert(Str::Owned("@".to_string() + k.as_ref()), v);
+            } else {
+                clef.additional.insert(k, v);
+            }
         }
 
         // Set additional properties first; these override any in an embedded CLEF payload,
@@ -315,6 +368,24 @@ where
     }
 }
 
+fn sanitize_hex(field: Option<Str>, required_len: usize) -> Option<Str> {
+    let Some(field) = field else { return None };
+
+    if field.as_ref().len() != required_len {
+        return None;
+    }
+
+    if field
+        .as_ref()
+        .bytes()
+        .any(|c| !c.is_ascii_hexdigit() || c.is_ascii_uppercase())
+    {
+        return None;
+    }
+
+    Some(field)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -370,6 +441,11 @@ mod tests {
             "@mt": "A short message that helps {user_id} identify what is going on",
             "@t": "2013-11-21T17:11:02Z",
             "@x": "Backtrace here",
+            "@tr": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "@ps": "4Bf92f3577b34dA6",
+            "@sp": "xyz",
+            "@u": "Unknown",
+            "@@v": "Escaped unknown",
             "user_id": 4000
         });
 
@@ -398,6 +474,9 @@ mod tests {
                     "@mt": "A short message that helps {user_id} identify what is going on",
                     "@t": "2013-11-21T17:11:02Z",
                     "@x": "Backtrace here",
+                    "@tr": "4bf92f3577b34da6a3ce929d0e0e4736",
+                    "@@u": "Unknown",
+                    "@@v": "Escaped unknown",
                     "some_env_var": "bar",
                     "some_info": "foo",
                     "user_id": 9001,
