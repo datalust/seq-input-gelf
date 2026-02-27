@@ -224,6 +224,19 @@ where
                 .map(|s| s.into_owned());
         }
 
+        // Sanitize unrecognized CLEF fields; we don't arbitrarily pass these through,
+        // because they may be rejected at ingestion time.
+        for (k, v) in std::mem::take(&mut clef.additional) {
+            if k.as_ref().starts_with("@") && !k.as_ref().starts_with("@@") {
+                // The byte slicing here is fine, since `@` is a single UTF-8 byte.
+                // We silently ignore conflicts here, there's no great benefit to gain by
+                // detecting them.
+                clef.additional.insert(Str::Owned("@".to_string() + k.as_ref()), v);
+            } else {
+                clef.additional.insert(k, v);
+            }
+        }
+
         // Set additional properties first; these override any in an embedded CLEF payload,
         // because we trust the configuration of the logger ahead of any one event.
         if let Some(additional) = self.additional() {
@@ -370,6 +383,8 @@ mod tests {
             "@mt": "A short message that helps {user_id} identify what is going on",
             "@t": "2013-11-21T17:11:02Z",
             "@x": "Backtrace here",
+            "@u": "Unknown",
+            "@@v": "Escaped unknown",
             "user_id": 4000
         });
 
@@ -398,6 +413,8 @@ mod tests {
                     "@mt": "A short message that helps {user_id} identify what is going on",
                     "@t": "2013-11-21T17:11:02Z",
                     "@x": "Backtrace here",
+                    "@@u": "Unknown",
+                    "@@v": "Escaped unknown",
                     "some_env_var": "bar",
                     "some_info": "foo",
                     "user_id": 9001,
