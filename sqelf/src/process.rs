@@ -234,11 +234,14 @@ where
                 Value::Number(_) => {
                     clef.event_type = Some(event_type);
                 }
-                Value::String(mut s) => {
-                    if s.starts_with("0x") {
-                        s = s[2..].to_owned();
-                    }
-                    if let Ok(n) = u64::from_str_radix(&s, 16) {
+                Value::String(s) => {
+                    let s = if s.starts_with("0x") {
+                        &s[2..]
+                    } else {
+                        s.as_ref()
+                    };
+
+                    if let Ok(n) = u64::from_str_radix(s, 16) {
                         clef.event_type = Some(Value::Number(
                             Number::from_u128(n as u128).expect("u64 is a representable number"),
                         ));
