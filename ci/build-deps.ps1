@@ -1,6 +1,3 @@
-$IsCIBuild = $null -ne $env:APPVEYOR_BUILD_NUMBER
-$IsPublishedBuild = $IsCIBuild -and $null -eq $env:APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH
-
 function Write-BeginStep($invocation)
 {
     Write-Output ""
@@ -13,16 +10,18 @@ function Write-BeginStep($invocation)
     Write-Output ""
 }
 
-function Get-SemVer($shortver)
+function Get-SemVer()
 {
-    # This script originally (c) 2016 Serilog Contributors - license Apache 2.0
-    $branch = @{ $true = $env:APPVEYOR_REPO_BRANCH; $false = $(git symbolic-ref --short -q HEAD) }[$env:APPVEYOR_REPO_BRANCH -ne $NULL];
-    $suffix = @{ $true = ""; $false = ($branch.Substring(0, [math]::Min(10,$branch.Length)) -replace '[\/\+]','-').Trim("-")}[$branch -eq "main"]
+    $branch = @{ $true = $env:CI_TARGET_BRANCH; $false = $(git symbolic-ref --short -q HEAD) }[$NULL -ne $env:CI_TARGET_BRANCH];
+    $revision = @{ $true = "{0:00000}" -f $([convert]::ToInt32($env:CI_BUILD_NUMBER_BASE, 10) + 2300); $false = "local" }[$NULL -ne $env:CI_BUILD_NUMBER_BASE]
+    $suffix = @{ $true = ""; $false = "$($branch.Substring(0, [math]::Min(10,$branch.Length)) -replace '([^a-zA-Z0-9\-]*)', '')-$revision"}[$branch -eq "main" -and $revision -ne "local"]
+
+    $base = $(Get-Content ./baseversion).Trim()
 
     if ($suffix) {
-        $shortver + "-" + $suffix
+        $base + "." + $revision + "-" + $suffix
     } else {
-        $shortver
+        $base + "." + $revision
     }
 }
 
@@ -126,11 +125,8 @@ function Publish-Container($version)
     docker tag sqelf-ci:latest-arm64 datalust/sqelf-ci:$version-arm64
     if ($LASTEXITCODE) { exit 1 }
 
-    if ($IsCIBuild)
-    {
-        echo "$env:DOCKER_TOKEN" | docker login -u $env:DOCKER_USER --password-stdin
-        if ($LASTEXITCODE) { exit 1 }
-    }
+    echo "$env:DOCKER_TOKEN" | docker login -u $env:DOCKER_USER --password-stdin
+    if ($LASTEXITCODE) { exit 1 }
 
     docker push datalust/sqelf-ci:$version-x64
     if ($LASTEXITCODE) { exit 1 }
@@ -172,6 +168,7 @@ function Start-SeqEnvironment($protocol) {
     docker run --name sqelf-test-seq `
         --network sqelf-test `
         -e ACCEPT_EULA=Y `
+        -e SEQ_FIRSTRUN_NOAUTHENTICATION=True `
         -itd `
         -p 5342:80 `
         datalust/seq:latest
