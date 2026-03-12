@@ -1,11 +1,22 @@
-param (
-  [string] $shortver = "99.99.99"
-)
+sudo apt-get update
+sudo apt-get install -y libnss3-tools --no-install-recommends
 
-$ErrorActionPreference = "Stop"
+chmod +x ./tool/mkcert-linux-x64
+./tool/mkcert-linux-x64 -install
+
+$RequiredRustToolchain=$(cat ./rust-toolchain)
+
+curl https://sh.rustup.rs -sSf | sh -s -- --default-host x86_64-unknown-linux-gnu --default-toolchain $RequiredRustToolchain -y
+
+$env:PATH = "$HOME/.cargo/bin:$env:PATH"
+
+cargo install -f cross
+
 Push-Location "$PSScriptRoot/../../"
 
 . "./ci/build-deps.ps1"
+
+$version = Get-SemVer
 
 function Invoke-SmokeTest($protocol) {
     Write-BeginStep $MYINVOCATION
@@ -51,7 +62,7 @@ Build-TestAppContainer
 Invoke-SmokeTest("udp")
 Invoke-SmokeTest("tcp")
 
-if ($IsPublishedBuild) {
+if ($env:CI_PUBLISH) {
     Publish-Container (Get-SemVer $shortver)
 }
 else {
