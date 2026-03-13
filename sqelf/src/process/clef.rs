@@ -50,7 +50,56 @@ pub struct Message<'a> {
     #[serde(borrow)]
     pub exception: Option<Str<'a>>,
 
-    // @i and @r are currently not implemented
+    // An array of pre-rendered values to drop into the `@mt` template
+    #[serde(rename = "@r")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(borrow)]
+    pub renderings: Option<Vec<Str<'a>>>,
+
+    // Seq accepts pretty much anything for an event type, but really only works well
+    // if it's a number; we try to convert hex values to numbers when sanitizing, and
+    // drop everything else.
+    #[serde(rename = "@i")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_type: Option<Value>,
+
+    #[serde(rename = "@ra")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource_attributes: Option<HashMap<Str<'a>, Value>>,
+
+    #[serde(rename = "@sa")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope_attributes: Option<HashMap<Str<'a>, Value>>,
+
+    #[serde(rename = "@st")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_timestamp: Option<Timestamp>,
+
+    #[serde(rename = "@tr")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(borrow)]
+    pub trace_id: Option<Str<'a>>,
+
+    #[serde(rename = "@sp")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(borrow)]
+    pub span_id: Option<Str<'a>>,
+
+    #[serde(rename = "@ps")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(borrow)]
+    pub parent_span_id: Option<Str<'a>>,
+
+    #[serde(rename = "@sk")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(borrow)]
+    pub span_kind: Option<Str<'a>>,
+
+    // 2026.x metric definitions; this does have a set schema but ingestion tolerates
+    // invalid content.
+    #[serde(rename = "@d")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub definitions: Option<HashMap<Str<'a>, Value>>,
 
     // Everything else
     #[serde(flatten)]
@@ -135,6 +184,16 @@ impl<'a> Message<'a> {
             message: Some(Str::Borrowed(msg)),
             message_template: None,
             exception: None,
+            renderings: None,
+            event_type: None,
+            resource_attributes: None,
+            scope_attributes: None,
+            start_timestamp: None,
+            trace_id: None,
+            span_id: None,
+            parent_span_id: None,
+            span_kind: None,
+            definitions: None,
             additional: Default::default(),
         }
     }
