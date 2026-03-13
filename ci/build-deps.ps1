@@ -117,7 +117,7 @@ function Invoke-NuGetPack($version)
 
 function Publish-NuPkg($version)
 {
-    foreach ($nupkg in Get-ChildItem artifacts/*.nupkg) {
+    foreach ($nupkg in Get-ChildItem publish/*.nupkg) {
         & dotnet nuget push -k $env:NUGET_API_KEY -s https://api.nuget.org/v3/index.json "$nupkg"
         if($LASTEXITCODE -ne 0) { throw "Publishing failed" }
     }
@@ -128,7 +128,7 @@ function Publish-GitHubRelease($version)
 {
     Write-Output "build: Creating release for version $version"
 
-    iex "gh release create v$version --title v$version --generate-notes $(get-item ./artifacts/*.nupkg) $(get-item ./artifacts/*.snupkg)"
+    iex "gh release create v$version --title v$version --generate-notes $(get-item ./publish/*.nupkg) $(get-item ./publish/*.snupkg)"
 }
 
 function Publish-Container($version)
