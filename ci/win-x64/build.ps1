@@ -25,7 +25,7 @@ Invoke-WindowsTests
 # Invoke-LinuxBuild
 Invoke-NuGetPack ($version)
 
-if ($env:CI_PUBLISH) {
+if ($env:CI_EVENT -eq "push" -and $env:NUGET_API_KEY -ne "") {
     Publish-NuPkg ($version)
     Publish-GitHubRelease($version)
 }
