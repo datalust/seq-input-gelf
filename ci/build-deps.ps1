@@ -115,6 +115,26 @@ function Invoke-NuGetPack($version)
     if ($LASTEXITCODE) { exit 1 }
 }
 
+function Publish-NuPkg($version)
+{
+    Write-BeginStep $MYINVOCATION
+    
+    foreach ($nupkg in Get-ChildItem publish/*.nupkg) {
+        & dotnet nuget push -k $env:NUGET_API_KEY -s https://api.nuget.org/v3/index.json "$nupkg"
+        if($LASTEXITCODE -ne 0) { throw "Publishing failed" }
+    }
+}
+
+
+function Publish-GitHubRelease($version)
+{
+    Write-BeginStep $MYINVOCATION
+    
+    Write-Output "build: Creating release for version $version"
+
+    iex "gh release create v$version --title v$version --generate-notes $(get-item ./publish/*.nupkg) $(get-item ./publish/*.snupkg)"
+}
+
 function Publish-Container($version)
 {
     Write-BeginStep $MYINVOCATION
