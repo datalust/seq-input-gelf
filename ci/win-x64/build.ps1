@@ -23,6 +23,12 @@ Invoke-WindowsBuild
 Invoke-WindowsTests
 # NOTE: We're relying on GitHub Actions to copy the linux binary across here instead of building locally
 # Invoke-LinuxBuild
-Invoke-NuGetPack (Get-SemVer $shortver)
+Invoke-NuGetPack ($version)
 
-Pop-Location
+if ($env:CI_EVENT -eq "push" -and $env:NUGET_API_KEY -ne "") {
+    Publish-NuPkg ($version)
+    Publish-GitHubRelease($version)
+}
+else {
+    Write-Output "Not publishing NUPKG or GitHub release"
+}

@@ -62,8 +62,8 @@ Build-TestAppContainer
 Invoke-SmokeTest("udp")
 Invoke-SmokeTest("tcp")
 
-if ($env:CI_PUBLISH) {
-    Publish-Container (Get-SemVer $shortver)
+if ($env:CI_EVENT -eq "push" -and $env:DOCKER_TOKEN -ne "") {
+    Publish-Container (Get-SemVer)
 }
 else {
     Write-Output "Not publishing Docker container"
