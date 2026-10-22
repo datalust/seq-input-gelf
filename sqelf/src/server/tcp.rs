@@ -100,7 +100,7 @@ impl Server {
                     Box::pin(accept_tls(
                         conn,
                         tls.clone(),
-                        keep_alive.clone(),
+                        keep_alive,
                         max_size_bytes,
                         receive.clone(),
                     ))
@@ -111,12 +111,7 @@ impl Server {
 
         self.0
             .filter_map(move |conn| {
-                Box::pin(accept(
-                    conn,
-                    keep_alive.clone(),
-                    max_size_bytes,
-                    receive.clone(),
-                ))
+                Box::pin(accept(conn, keep_alive, max_size_bytes, receive.clone()))
             })
             .listen(1024)
             .boxed()

@@ -14,7 +14,7 @@ impl<'a> MemRead for &'a [u8] {
     type Reader = io::Cursor<&'a [u8]>;
 
     fn bytes(&self) -> Option<&[u8]> {
-        Some(&self)
+        Some(self)
     }
 
     fn into_reader(self) -> io::Result<Self::Reader> {

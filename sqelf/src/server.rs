@@ -225,7 +225,7 @@ pub fn build(
                     let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)
                         .collect::<Result<Vec<_>, _>>()?;
 
-                    if keys.len() == 0 {
+                    if keys.is_empty() {
                         bail!(format!("The file `{}` used for the certificate private key doesn't contain any PKCS8 keys", private_key_path));
                     }
 

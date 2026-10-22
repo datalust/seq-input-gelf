@@ -28,7 +28,7 @@ impl Stream {
 
     pub fn write(&mut self, chunks: Vec<Vec<u8>>) {
         for chunk in chunks {
-            self.inner.write(&chunk).expect("failed to send chunk");
+            self.inner.write_all(&chunk).expect("failed to send chunk");
         }
     }
 
@@ -83,7 +83,7 @@ impl TlsStream {
 
     pub fn write(&mut self, chunks: Vec<Vec<u8>>) {
         for chunk in chunks {
-            self.inner.write(&chunk).expect("failed to send chunk");
+            self.inner.write_all(&chunk).expect("failed to send chunk");
         }
 
         self.inner.flush().expect("failed to flush chunk");
