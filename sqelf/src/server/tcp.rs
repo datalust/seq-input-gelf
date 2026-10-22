@@ -18,6 +18,8 @@ use crate::{
 
 use anyhow::Error;
 
+use pin_project_lite::pin_project;
+
 use bytes::{
     Buf,
     Bytes,
@@ -38,8 +40,6 @@ use futures::{
         Poll,
     },
 };
-
-use pin_utils::unsafe_pinned;
 
 use tokio::io::{
     AsyncRead,
@@ -196,16 +196,17 @@ impl Stream for TcpIncoming {
     }
 }
 
-/**
-A wrapper around a TLS stream that handles connection closes.
-*/
-struct QuietClose<R> {
-    inner: R,
+pin_project! {
+    /**
+    A wrapper around a TLS stream that handles connection closes.
+    */
+    struct QuietClose<R> {
+        #[pin]
+        inner: R,
+    }
 }
 
 impl<R> QuietClose<R> {
-    unsafe_pinned!(inner: R);
-
     fn new(read: R) -> Self {
         QuietClose { inner: read }
     }
@@ -217,7 +218,7 @@ impl<R: AsyncRead> AsyncRead for QuietClose<R> {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        let inner = self.inner();
+        let inner = self.project().inner;
 
         match inner.poll_read(cx, buf) {
             Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
@@ -233,26 +234,21 @@ impl<R: AsyncRead> AsyncRead for QuietClose<R> {
     }
 }
 
-/**
-An active set of connections that are processed fairly.
-*/
-struct Listen<S>
-where
-    S: Stream,
-    S::Item: Stream,
-{
-    accept: Fuse<S>,
-    connections: FuturesUnordered<StreamFuture<S::Item>>,
-    max: usize,
-}
-
-impl<S> Listen<S>
-where
-    S: Stream,
-    S::Item: Stream,
-{
-    unsafe_pinned!(accept: Fuse<S>);
-    unsafe_pinned!(connections: FuturesUnordered<StreamFuture<S::Item>>);
+pin_project! {
+    /**
+    An active set of connections that are processed fairly.
+    */
+    struct Listen<S>
+    where
+        S: Stream,
+        S::Item: Stream,
+    {
+        #[pin]
+        accept: Fuse<S>,
+        #[pin]
+        connections: FuturesUnordered<StreamFuture<S::Item>>,
+        max: usize,
+    }
 }
 
 impl<S, T> Stream for Listen<S>
@@ -264,28 +260,30 @@ where
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         'poll_conns: loop {
+            let mut this = self.as_mut().project();
+
             // Fill up our accepted connections
-            'fill_conns: while self.connections.len() < self.max {
-                let conn = match self.as_mut().accept().poll_next(cx) {
+            'fill_conns: while this.connections.len() < *this.max {
+                let conn = match this.accept.as_mut().poll_next(cx) {
                     Poll::Ready(Some(s)) => s.into_future(),
                     Poll::Ready(None) | Poll::Pending => break 'fill_conns,
                 };
 
-                self.connections.push(conn);
+                this.connections.push(conn);
             }
 
             // Try polling the stream
             // NOTE: We're assuming the unordered list will
             // always make forward progress polling futures
             // even if one future is particularly chatty
-            match self.as_mut().connections().poll_next(cx) {
+            match this.connections.as_mut().poll_next(cx) {
                 // We have an item from a connection
                 Poll::Ready(Some((Some(item), conn))) => {
                     match item {
                         // A valid item was produced
                         // Return it and put the connection back in the pool.
                         Ok(item) => {
-                            self.connections.push(conn.into_future());
+                            this.connections.push(conn.into_future());
 
                             return Poll::Ready(Some(Ok(item)));
                         }
@@ -312,7 +310,7 @@ where
         // If we've gotten this far, then there are no events for us to process
         // and nothing was ready, so figure out if we're not done yet or if
         // we've reached the end.
-        if self.accept.is_done() {
+        if self.as_mut().project().accept.is_done() {
             Poll::Ready(None)
         } else {
             Poll::Pending

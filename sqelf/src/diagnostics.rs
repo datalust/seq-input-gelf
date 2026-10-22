@@ -3,6 +3,7 @@ use chrono::{
     DateTime,
     Utc,
 };
+use std::sync::LazyLock;
 use std::{
     collections::HashMap,
     ops::Drop,
@@ -21,9 +22,7 @@ use std::{
 
 pub(crate) static MIN_LEVEL: MinLevel = MinLevel(AtomicUsize::new(0));
 
-lazy_static! {
-    static ref DIAGNOSTICS: Mutex<Option<Diagnostics>> = Mutex::new(None);
-}
+static DIAGNOSTICS: LazyLock<Mutex<Option<Diagnostics>>> = LazyLock::new(|| Mutex::new(None));
 
 /**
 Diagnostics configuration.
