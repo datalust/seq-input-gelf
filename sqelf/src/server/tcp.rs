@@ -1,3 +1,4 @@
+#[cfg(feature = "tls")]
 use std::sync::Arc;
 use std::{
     cmp,
@@ -41,10 +42,9 @@ use futures::{
     },
 };
 
-use tokio::io::{
-    AsyncRead,
-    ReadBuf,
-};
+use tokio::io::AsyncRead;
+#[cfg(feature = "tls")]
+use tokio::io::ReadBuf;
 use tokio::{
     net::{
         TcpListener,
@@ -55,6 +55,7 @@ use tokio::{
         Timeout,
     },
 };
+#[cfg(feature = "tls")]
 use tokio_rustls::rustls::ServerConfig;
 
 use tokio_util::codec::{
@@ -62,6 +63,7 @@ use tokio_util::codec::{
     FramedRead,
 };
 
+#[cfg(feature = "tls")]
 use tokio_rustls::TlsAcceptor;
 
 pub(super) struct Server(TcpIncoming);
@@ -77,7 +79,7 @@ impl Server {
         self,
         keep_alive: Duration,
         max_size_bytes: usize,
-        tls: Option<ServerConfig>,
+        #[cfg(feature = "tls")] tls: Option<ServerConfig>,
         receive: impl FnMut(Bytes) -> Result<Option<Message>, Error>
             + Send
             + Sync
@@ -87,10 +89,13 @@ impl Server {
     ) -> impl Stream<Item = Result<Received, Error>> {
         emit("Setting up for TCP");
 
+        // Wrap the connections in a TLS handshake when a certificate is configured
+        #[cfg(feature = "tls")]
         if let Some(tls) = tls {
             let tls = TlsAcceptor::from(Arc::new(tls));
 
-            self.0
+            return self
+                .0
                 .filter_map(move |conn| {
                     Box::pin(accept_tls(
                         conn,
@@ -101,23 +106,24 @@ impl Server {
                     ))
                 })
                 .listen(1024)
-                .boxed()
-        } else {
-            self.0
-                .filter_map(move |conn| {
-                    Box::pin(accept(
-                        conn,
-                        keep_alive.clone(),
-                        max_size_bytes,
-                        receive.clone(),
-                    ))
-                })
-                .listen(1024)
-                .boxed()
+                .boxed();
         }
+
+        self.0
+            .filter_map(move |conn| {
+                Box::pin(accept(
+                    conn,
+                    keep_alive.clone(),
+                    max_size_bytes,
+                    receive.clone(),
+                ))
+            })
+            .listen(1024)
+            .boxed()
     }
 }
 
+#[cfg(feature = "tls")]
 async fn accept_tls(
     conn: Result<TcpStream, io::Error>,
     tls: TlsAcceptor,
@@ -196,6 +202,7 @@ impl Stream for TcpIncoming {
     }
 }
 
+#[cfg(feature = "tls")]
 pin_project! {
     /**
     A wrapper around a TLS stream that handles connection closes.
@@ -206,12 +213,14 @@ pin_project! {
     }
 }
 
+#[cfg(feature = "tls")]
 impl<R> QuietClose<R> {
     fn new(read: R) -> Self {
         QuietClose { inner: read }
     }
 }
 
+#[cfg(feature = "tls")]
 impl<R: AsyncRead> AsyncRead for QuietClose<R> {
     fn poll_read(
         self: Pin<&mut Self>,
