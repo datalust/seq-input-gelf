@@ -1,4 +1,6 @@
+#[cfg(feature = "tls")]
 use std::fs::File;
+#[cfg(feature = "tls")]
 use std::io::BufReader;
 use std::{
     marker::Unpin,
@@ -25,6 +27,7 @@ use tokio::{
 use anyhow::Error;
 
 use bytes::Bytes;
+#[cfg(feature = "tls")]
 use tokio_rustls::rustls;
 
 use crate::{
@@ -201,6 +204,13 @@ pub fn build(
                 Either::Left(server)
             }
             Protocol::Tcp => {
+                // A certificate can't be honoured without TLS compiled into this build
+                #[cfg(not(feature = "tls"))]
+                if config.certificate.is_some() {
+                    bail!("TLS support is not enabled in this build")
+                }
+
+                #[cfg(feature = "tls")]
                 let tls_config = if let Some(Certificate {
                     path,
                     private_key_path,
@@ -215,7 +225,7 @@ pub fn build(
                     let mut keys = rustls_pemfile::pkcs8_private_keys(&mut reader)
                         .collect::<Result<Vec<_>, _>>()?;
 
-                    if keys.len() == 0 {
+                    if keys.is_empty() {
                         bail!(format!("The file `{}` used for the certificate private key doesn't contain any PKCS8 keys", private_key_path));
                     }
 
@@ -231,6 +241,7 @@ pub fn build(
                 let server = tcp::Server::bind(&addr).await?.build(
                     Duration::from_secs(config.tcp_keep_alive_secs),
                     config.tcp_max_size_bytes as usize,
+                    #[cfg(feature = "tls")]
                     tls_config,
                     receive,
                 );

@@ -3,6 +3,7 @@ use chrono::{
     DateTime,
     Utc,
 };
+use std::sync::LazyLock;
 use std::{
     collections::HashMap,
     ops::Drop,
@@ -21,9 +22,7 @@ use std::{
 
 pub(crate) static MIN_LEVEL: MinLevel = MinLevel(AtomicUsize::new(0));
 
-lazy_static! {
-    static ref DIAGNOSTICS: Mutex<Option<Diagnostics>> = Mutex::new(None);
-}
+static DIAGNOSTICS: LazyLock<Mutex<Option<Diagnostics>>> = LazyLock::new(|| Mutex::new(None));
 
 /**
 Diagnostics configuration.
@@ -43,7 +42,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            metrics_interval_ms: 1 * 1000 * 60, // 1 minute
+            metrics_interval_ms: 1000 * 60, // 1 minute
             min_level: Level::Error,
         }
     }
@@ -200,7 +199,7 @@ impl<'a> DiagnosticEvent<'a> {
 
 pub fn emit(message_template: &'static str) {
     if MIN_LEVEL.includes(Level::Debug) {
-        let evt = DiagnosticEvent::new("DEBUG", None, &message_template, None);
+        let evt = DiagnosticEvent::new("DEBUG", None, message_template, None);
         let json = serde_json::to_string(&evt).expect("infallible JSON");
         eprintln!("{}", json);
     }
@@ -209,7 +208,7 @@ pub fn emit(message_template: &'static str) {
 pub fn emit_debug_err(error: &(dyn std::error::Error + 'static), message_template: &'static str) {
     if MIN_LEVEL.includes(Level::Debug) {
         let err_str = format_error(error);
-        let evt = DiagnosticEvent::new("DEBUG", Some(&err_str), &message_template, None);
+        let evt = DiagnosticEvent::new("DEBUG", Some(&err_str), message_template, None);
         let json = serde_json::to_string(&evt).expect("infallible JSON");
         eprintln!("{}", json);
     }
@@ -218,7 +217,7 @@ pub fn emit_debug_err(error: &(dyn std::error::Error + 'static), message_templat
 pub fn emit_err(error: &(dyn std::error::Error + 'static), message_template: &'static str) {
     if MIN_LEVEL.includes(Level::Error) {
         let err_str = format_error(error);
-        let evt = DiagnosticEvent::new("ERROR", Some(&err_str), &message_template, None);
+        let evt = DiagnosticEvent::new("ERROR", Some(&err_str), message_template, None);
         let json = serde_json::to_string(&evt).expect("infallible JSON");
         eprintln!("{}", json);
     }

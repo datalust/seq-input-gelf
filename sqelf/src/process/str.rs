@@ -189,7 +189,7 @@ where
 {
     fn as_ref(&self) -> &str {
         match self {
-            Inlinable::Inline(s) => &*s,
+            Inlinable::Inline(s) => s,
             Inlinable::Spilled(s) => s.as_ref(),
         }
     }
@@ -203,8 +203,8 @@ where
 
     fn deref(&self) -> &str {
         match self {
-            Inlinable::Inline(s) => &*s,
-            Inlinable::Spilled(s) => &*s,
+            Inlinable::Inline(s) => s,
+            Inlinable::Spilled(s) => s,
         }
     }
 }

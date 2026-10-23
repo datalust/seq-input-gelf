@@ -8,7 +8,7 @@ mod cases;
 use std::env;
 
 fn main() {
-    let case = env::args().skip(1).next();
+    let case = env::args().nth(1);
 
     if let Some(case) = case {
         cases::test(case);

@@ -107,9 +107,9 @@ where
 {
     match env::var(name.as_ref()) {
         // The environment variable exists, but is empty
-        Ok(ref v) if v == "" => return Ok(()),
+        Ok(ref v) if v.is_empty() => Ok(()),
         // The environment variable does not exist
-        Err(env::VarError::NotPresent) => return Ok(()),
+        Err(env::VarError::NotPresent) => Ok(()),
         // The environment variable is invalid
         Err(e) => Err(e)?,
         // The environment variable has a value
