@@ -84,8 +84,8 @@ fn listen_for_stdin_closed(handle: server::Handle) {
 }
 
 fn main() {
-    let run_server: Result<(), Error> = catch_unwind(|| run())
-        .map_err(|panic| unwrap_panic(panic).into())
+    let run_server: Result<(), Error> = catch_unwind(run)
+        .map_err(unwrap_panic)
         .and_then(|inner| inner);
 
     if let Err(err) = run_server {

@@ -199,7 +199,7 @@ impl<'a> Message<'a> {
     }
 
     pub(super) fn maybe_from_json(json: &'a str) -> Option<Self> {
-        if json.chars().next() == Some('{') {
+        if json.starts_with('{') {
             serde_json::from_str(json).ok()
         } else {
             None

@@ -30,21 +30,13 @@ metrics! {
 /**
 Configuration for CELF formatting.
 */
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Config {
     /**
     Whether or not to buffer and include the raw GELF payload
     in the event message.
     */
     pub include_raw_payload: bool,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Config {
-            include_raw_payload: false,
-        }
-    }
 }
 
 /**
@@ -200,7 +192,7 @@ where
             clef.timestamp =
                 Self::find_first(&clef.additional, &["timestamp", "ts", "TIMESTAMP", "TS"])
                     .and_then(|v| v.as_str())
-                    .and_then(|s| clef::Timestamp::try_parse_rfc3339(s))
+                    .and_then(clef::Timestamp::try_parse_rfc3339)
                     .or_else(|| {
                         timestamp
                             .and_then(clef::Timestamp::from_decimal)
@@ -235,11 +227,7 @@ where
                     clef.event_type = Some(event_type);
                 }
                 Value::String(s) => {
-                    let s = if s.starts_with("0x") {
-                        &s[2..]
-                    } else {
-                        s.as_ref()
-                    };
+                    let s = s.strip_prefix("0x").unwrap_or(s.as_str());
 
                     if let Ok(n) = u64::from_str_radix(s, 16) {
                         clef.event_type = Some(Value::Number(
@@ -359,7 +347,7 @@ where
     fn additional(&self) -> Option<impl IntoIterator<Item = (&str, &Value)>> {
         match self.additional {
             Some(Value::Object(ref additional)) => Some(additional.iter().map(|(k, v)| {
-                let k = if k.starts_with('_') { &k[1..] } else { &k };
+                let k = k.strip_prefix('_').unwrap_or(k.as_str());
 
                 (k, v)
             })),
@@ -369,7 +357,7 @@ where
 }
 
 fn sanitize_hex(field: Option<Str>, required_len: usize) -> Option<Str> {
-    let Some(field) = field else { return None };
+    let field = field?;
 
     if field.as_ref().len() != required_len {
         return None;
@@ -557,7 +545,6 @@ mod tests {
 
         let process = Process::new(Config {
             include_raw_payload: true,
-            ..Default::default()
         });
 
         process
@@ -593,7 +580,6 @@ mod tests {
 
         let process = Process::new(Config {
             include_raw_payload: true,
-            ..Default::default()
         });
 
         let err = process
@@ -609,7 +595,6 @@ mod tests {
 
         let process = Process::new(Config {
             include_raw_payload: true,
-            ..Default::default()
         });
 
         let err = process

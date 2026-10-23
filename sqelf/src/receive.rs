@@ -184,7 +184,7 @@ impl Gelf {
             } => {
                 let magic = Message::peek_magic_bytes(&src);
 
-                return Ok(Message::single(magic.and_then(Compression::detect), src));
+                Ok(Message::single(magic.and_then(Compression::detect), src))
             }
             // If the message has too many chunks then discard it
             ChunkHeader { seq_count, .. } if seq_count > self.config.max_chunks_per_message => {
@@ -268,9 +268,7 @@ impl Gelf {
 
                     increment!(receive.msg_chunked);
 
-                    Ok(Message::chunked(
-                        chunks.inner.into_iter().map(|(_, chunk)| chunk),
-                    ))
+                    Ok(Message::chunked(chunks.inner.into_values()))
                 } else {
                     Ok(None)
                 }
@@ -383,7 +381,7 @@ impl Message {
     const MAGIC_CHUNKED: [u8; 2] = [0x1e, 0x0f];
 
     fn single(compression: Option<Compression>, src: Bytes) -> Option<Self> {
-        if src.len() == 0 {
+        if src.is_empty() {
             return None;
         }
 
@@ -401,7 +399,7 @@ impl Message {
     fn chunked(chunks: impl IntoIterator<Item = Bytes>) -> Option<Self> {
         let chunks: Vec<_> = chunks.into_iter().collect();
 
-        if chunks.len() == 0 {
+        if chunks.is_empty() {
             return None;
         }
 
@@ -424,7 +422,7 @@ impl Message {
             MessageInner::Single { compression, .. } => *compression,
             MessageInner::Chunked { chunks } => chunks
                 .first()
-                .and_then(|chunk| Self::peek_magic_bytes(&chunk))
+                .and_then(|chunk| Self::peek_magic_bytes(chunk))
                 .and_then(Compression::detect),
         }
     }
@@ -438,7 +436,7 @@ impl MemRead for Message {
             MessageInner::Single {
                 bytes,
                 compression: None,
-            } => Some(&*bytes),
+            } => Some(bytes),
             _ => None,
         }
     }
@@ -493,7 +491,7 @@ impl Read for ChunkRead {
     fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
         match &mut self.msg {
             MessageInner::Single { bytes, .. } => {
-                if b.len() == 0 {
+                if b.is_empty() {
                     return Ok(0);
                 }
 
@@ -509,7 +507,7 @@ impl Read for ChunkRead {
                 let mut b = b;
                 let mut total = 0;
 
-                while b.len() > 0 {
+                while !b.is_empty() {
                     if let Some(bytes) = chunks.get(self.chunk) {
                         let readable = &bytes[self.cursor..];
 

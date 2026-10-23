@@ -1,3 +1,4 @@
+#[cfg(feature = "tls")]
 use std::sync::Arc;
 use std::{
     cmp,
@@ -17,6 +18,8 @@ use crate::{
 };
 
 use anyhow::Error;
+
+use pin_project_lite::pin_project;
 
 use bytes::{
     Buf,
@@ -39,12 +42,9 @@ use futures::{
     },
 };
 
-use pin_utils::unsafe_pinned;
-
-use tokio::io::{
-    AsyncRead,
-    ReadBuf,
-};
+use tokio::io::AsyncRead;
+#[cfg(feature = "tls")]
+use tokio::io::ReadBuf;
 use tokio::{
     net::{
         TcpListener,
@@ -55,6 +55,7 @@ use tokio::{
         Timeout,
     },
 };
+#[cfg(feature = "tls")]
 use tokio_rustls::rustls::ServerConfig;
 
 use tokio_util::codec::{
@@ -62,6 +63,7 @@ use tokio_util::codec::{
     FramedRead,
 };
 
+#[cfg(feature = "tls")]
 use tokio_rustls::TlsAcceptor;
 
 pub(super) struct Server(TcpIncoming);
@@ -77,7 +79,7 @@ impl Server {
         self,
         keep_alive: Duration,
         max_size_bytes: usize,
-        tls: Option<ServerConfig>,
+        #[cfg(feature = "tls")] tls: Option<ServerConfig>,
         receive: impl FnMut(Bytes) -> Result<Option<Message>, Error>
             + Send
             + Sync
@@ -87,37 +89,36 @@ impl Server {
     ) -> impl Stream<Item = Result<Received, Error>> {
         emit("Setting up for TCP");
 
+        // Wrap the connections in a TLS handshake when a certificate is configured
+        #[cfg(feature = "tls")]
         if let Some(tls) = tls {
             let tls = TlsAcceptor::from(Arc::new(tls));
 
-            self.0
+            return self
+                .0
                 .filter_map(move |conn| {
                     Box::pin(accept_tls(
                         conn,
                         tls.clone(),
-                        keep_alive.clone(),
+                        keep_alive,
                         max_size_bytes,
                         receive.clone(),
                     ))
                 })
                 .listen(1024)
-                .boxed()
-        } else {
-            self.0
-                .filter_map(move |conn| {
-                    Box::pin(accept(
-                        conn,
-                        keep_alive.clone(),
-                        max_size_bytes,
-                        receive.clone(),
-                    ))
-                })
-                .listen(1024)
-                .boxed()
+                .boxed();
         }
+
+        self.0
+            .filter_map(move |conn| {
+                Box::pin(accept(conn, keep_alive, max_size_bytes, receive.clone()))
+            })
+            .listen(1024)
+            .boxed()
     }
 }
 
+#[cfg(feature = "tls")]
 async fn accept_tls(
     conn: Result<TcpStream, io::Error>,
     tls: TlsAcceptor,
@@ -196,28 +197,32 @@ impl Stream for TcpIncoming {
     }
 }
 
-/**
-A wrapper around a TLS stream that handles connection closes.
-*/
-struct QuietClose<R> {
-    inner: R,
+#[cfg(feature = "tls")]
+pin_project! {
+    /**
+    A wrapper around a TLS stream that handles connection closes.
+    */
+    struct QuietClose<R> {
+        #[pin]
+        inner: R,
+    }
 }
 
+#[cfg(feature = "tls")]
 impl<R> QuietClose<R> {
-    unsafe_pinned!(inner: R);
-
     fn new(read: R) -> Self {
         QuietClose { inner: read }
     }
 }
 
+#[cfg(feature = "tls")]
 impl<R: AsyncRead> AsyncRead for QuietClose<R> {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        let inner = self.inner();
+        let inner = self.project().inner;
 
         match inner.poll_read(cx, buf) {
             Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
@@ -233,26 +238,21 @@ impl<R: AsyncRead> AsyncRead for QuietClose<R> {
     }
 }
 
-/**
-An active set of connections that are processed fairly.
-*/
-struct Listen<S>
-where
-    S: Stream,
-    S::Item: Stream,
-{
-    accept: Fuse<S>,
-    connections: FuturesUnordered<StreamFuture<S::Item>>,
-    max: usize,
-}
-
-impl<S> Listen<S>
-where
-    S: Stream,
-    S::Item: Stream,
-{
-    unsafe_pinned!(accept: Fuse<S>);
-    unsafe_pinned!(connections: FuturesUnordered<StreamFuture<S::Item>>);
+pin_project! {
+    /**
+    An active set of connections that are processed fairly.
+    */
+    struct Listen<S>
+    where
+        S: Stream,
+        S::Item: Stream,
+    {
+        #[pin]
+        accept: Fuse<S>,
+        #[pin]
+        connections: FuturesUnordered<StreamFuture<S::Item>>,
+        max: usize,
+    }
 }
 
 impl<S, T> Stream for Listen<S>
@@ -264,28 +264,30 @@ where
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         'poll_conns: loop {
+            let mut this = self.as_mut().project();
+
             // Fill up our accepted connections
-            'fill_conns: while self.connections.len() < self.max {
-                let conn = match self.as_mut().accept().poll_next(cx) {
+            'fill_conns: while this.connections.len() < *this.max {
+                let conn = match this.accept.as_mut().poll_next(cx) {
                     Poll::Ready(Some(s)) => s.into_future(),
                     Poll::Ready(None) | Poll::Pending => break 'fill_conns,
                 };
 
-                self.connections.push(conn);
+                this.connections.push(conn);
             }
 
             // Try polling the stream
             // NOTE: We're assuming the unordered list will
             // always make forward progress polling futures
             // even if one future is particularly chatty
-            match self.as_mut().connections().poll_next(cx) {
+            match this.connections.as_mut().poll_next(cx) {
                 // We have an item from a connection
                 Poll::Ready(Some((Some(item), conn))) => {
                     match item {
                         // A valid item was produced
                         // Return it and put the connection back in the pool.
                         Ok(item) => {
-                            self.connections.push(conn.into_future());
+                            this.connections.push(conn.into_future());
 
                             return Poll::Ready(Some(Ok(item)));
                         }
@@ -312,7 +314,7 @@ where
         // If we've gotten this far, then there are no events for us to process
         // and nothing was ready, so figure out if we're not done yet or if
         // we've reached the end.
-        if self.accept.is_done() {
+        if self.as_mut().project().accept.is_done() {
             Poll::Ready(None)
         } else {
             Poll::Pending

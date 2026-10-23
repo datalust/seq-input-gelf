@@ -85,7 +85,6 @@ impl Builder {
                             .take()
                             .unwrap_or(path),
                     }),
-                ..Default::default()
             },
             receive::Config {
                 max_chunks_per_message: self.udp_max_chunks_per_message,

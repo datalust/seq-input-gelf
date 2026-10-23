@@ -5,16 +5,13 @@ The server is split into a few main components, in order of where they appear in
 
 - **Server**: An asynchronous UDP/TCP server built on `tokio` that handles the network.
 - **Receive**: Assembles complete GELF messages from their chunked, compressed, out-of-order
-blocks arriving from the network.
+  blocks arriving from the network.
 - **Process**: Deserializes GELF messages and maps them into CLEF. This is where any transformations
-over properties are made.
+  over properties are made.
 */
 
 #![recursion_limit = "256"]
 #![deny(unsafe_code, warnings)]
-
-#[macro_use]
-extern crate lazy_static;
 
 #[macro_use]
 extern crate serde_derive;
